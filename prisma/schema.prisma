@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // Funkar klockrent med Supabase
+  url      = env("DATABASE_URL")
+}
+
+// 1. Tävlingsomgången (T.ex. V86 på Solvalla)
+model RaceEvent {
+  id          String   @id @default(uuid())
+  date        DateTime // Datum för tävlingen
+  track       String   // Banan (t.ex. Solvalla/Jägersro)
+  type        String   // V75, V86, Dagens Dubbel
+  races       Race[]
+  createdAt   DateTime @default(now())
+}
+
+// 2. Själva racen inom omgången
+model Race {
+  id              String       @id @default(uuid())
+  eventId         String
+  event           RaceEvent    @relation(fields: [eventId], references: [id])
+  raceNumber      Int          // Lopp 1-8 (t ex V86-1)
+  distance        Int          // Ex: 2140 eller 1640 meter
+  startMethod     String       // Auto eller Volt
+  trackCondition  String?      // Lätt, Tung, Kladdig, Regn
+  horses          HorseEntry[]
+}
+
+// 3. Hästarna (Här lagras fakta före start OCH resultatet efter)
+model HorseEntry {
+  id            String   @id @default(uuid())
+  raceId        String
+  race          Race     @relation(fields: [raceId], references: [id])
+  startNumber   Int      // Startspår (1-15)
+  horseName     String   // Hästens nammn
+  driver        String   // Kusken
+  trainer       String   // Tränaren
+  shoes         String?  // Ex: "BRO" (Barfota Runt Om)
+  sulky         String?  // Vanlig eller Jänkarvagn (-/-)
+  startOdds     Float?   // Stängningsodds
+  streckPercent Float?   // Vinnarprocent (Strecken) från svenska folket
+  
+  // FACIT FÖR FRAMTIDA UTVÄRDERING 
+  actualResult  Int?     // Placering 1, 2, 3, eller 0 vid galopp/oplacerad
+}
+
+// 4. Logg på vad AI:n förutspådde
+model AI_PredictionLog {
+  id              String   @id @default(uuid())
+  eventId         String
+  strategy        String   // "safe", "ev", "jackpot"
+  budget          Float
+  promptContext   String   // Texten/Datan vi tryckte in i Claude
+  aiRawResponse   String   // Svaret vi fick ut (+ motiveringarna)
+  createdAt       DateTime @default(now())
+  hasBeenEvaluated Boolean @default(false) // Om den utvärderats post-race
+}
+
+// 5. RAG Minnesbanken (Insikter) - Det som gör AI:n smartare över tid!
+model CoreInsight {
+  id            String   @id @default(uuid())
+  category      String   // T.ex. "TrackCondition", "DriverPattern", "ShoeChange"
+  insightText   String   // "LÄRDOM: På tunga banor tappar Jänkarvagnar 30% av sin effekt..."
+  confidence    Float    // 0.0 - 1.0 (Hur mycket litar AI:n på denna kunskap ännu?)
+  updatedAt     DateTime @updatedAt
+}
