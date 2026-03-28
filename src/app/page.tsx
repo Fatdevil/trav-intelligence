@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CinematicHero } from '@/components/ui/cinematic-hero';
 
 type HorseSelection = {
@@ -35,7 +35,31 @@ export default function Home() {
   const [budget, setBudget] = useState<string>('');
   const [strategy, setStrategy] = useState<string>('ev');
   const [loading, setLoading] = useState(false);
+  const [loadingTextIndex, setLoadingTextIndex] = useState(0);
   const [result, setResult] = useState<AIResponse | null>(null);
+
+  const loadingMessages = [
+    "⚡ Etablerar krypterad säkerhetslänk till ATG...",
+    "📡 Klonar V75-startlistor & Live-Odds från mainfraime...",
+    "🤖 Skvaller-Agenten skrapar nätet efter morgonens värmningar...",
+    "🌧️ Ban-Experten kvantifierar väderdata och skotvång...",
+    "📉 Skrälljägaren söker efter asymmetriska EV-värden...",
+    "⚖️ Master Judge RAG-kollar tidigare minnen och bedömer starten...",
+    "✂️ Den matematiska reduceraren slaktar rader för att matcha din budget...",
+    "🔥 Paketerar exklusiv miljon-XML för omedelbar export..."
+  ];
+
+  // Kör fejkad uppbyggnad av laddtexter för maximal "Hackerkänsla"
+  useEffect(() => {
+    let interval: any;
+    if (loading) {
+      setLoadingTextIndex(0);
+      interval = setInterval(() => {
+        setLoadingTextIndex(prev => (prev < loadingMessages.length - 1 ? prev + 1 : prev));
+      }, 1500);
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
 
   const generateSystem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,10 +136,25 @@ export default function Home() {
       </div>
 
       {loading && (
-        <div className="glass-panel skeleton-card">
-          <div className="skeleton title"></div>
-          <div className="skeleton text"></div>
-          <div className="skeleton text text-short"></div>
+        <div className="glass-panel" style={{ border: '1px solid rgba(57, 255, 20, 0.4)', boxShadow: '0 0 40px rgba(57, 255, 20, 0.1)'}}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', borderBottom: '1px solid rgba(57,255,20,0.2)', paddingBottom: '1rem', marginBottom: '1rem' }}>
+            <div className="spinner" style={{width: '20px', height: '20px', border: '3px solid rgba(57,255,20,0.3)', borderTop: '3px solid #39ff14', borderRadius: '50%', animation: 'spin 1s linear infinite'}}></div>
+            <h3 style={{color: '#39ff14', fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '2px', margin: 0}}>Tillverkar System</h3>
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono), monospace', color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+            {loadingMessages.map((msg, idx) => (
+              <div key={idx} style={{ 
+                opacity: idx <= loadingTextIndex ? 1 : 0.2, 
+                color: idx === loadingTextIndex ? '#39ff14' : 'rgba(255,255,255,0.5)',
+                transition: 'all 0.3s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}>
+                <span style={{opacity: idx === loadingTextIndex ? 1 : 0}}>&gt;</span> {msg}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -127,13 +166,18 @@ export default function Home() {
               {result.analysisSummary}
             </p>
             
-            <h3 style={{color: '#39ff14', fontSize: '1.2rem', marginBottom: '1rem', textTransform: 'uppercase'}}>Kupongens Kärna</h3>
+            <h3 style={{color: '#ffcc00', fontSize: '1.2rem', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '1px', textShadow: '0 0 10px rgba(255, 204, 0, 0.5)'}}>👑 Kupongens Kärna (Dina AI-Spikar)</h3>
             <div className="horse-grid">
               {result.selections.map(horse => (
-                <div key={horse.id} className="horse-card">
+                <div key={horse.id} className="horse-card" style={{ 
+                  background: 'linear-gradient(145deg, rgba(255,215,0,0.05) 0%, rgba(0,0,0,0.8) 100%)',
+                  border: '1px solid rgba(255, 204, 0, 0.4)', 
+                  boxShadow: '0 10px 30px rgba(255, 204, 0, 0.15)',
+                  transform: 'translateY(-2px)'
+                }}>
                   <div className="horse-header">
                     <div>
-                      <span style={{color: '#ffcc00', fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px'}}>{horse.lopp}</span>
+                      <span style={{color: '#ffcc00', fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', background: 'rgba(255,204,0,0.1)', padding: '2px 6px', borderRadius: '4px'}}>{horse.lopp}</span>
                       <div className="horse-name">{horse.name}</div>
                     </div>
                     <div className="horse-odds">{horse.odds}</div>
@@ -191,21 +235,33 @@ export default function Home() {
               <h3>System Redo: {result.totalRows} rader × {result.systemCost > 0 && result.totalRows > 0 ? (result.systemCost / result.totalRows).toFixed(2) : '1.00'} kr = {result.systemCost} kr</h3>
               <p style={{color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem', marginBottom: '1rem'}}>Matematiskt reducerat utifrån din budget och AI:ns ranking.</p>
               {result.xmlContent && (
-                <button 
-                  onClick={() => {
-                    const blob = new Blob([result.xmlContent], { type: 'application/xml' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'trav-ai-system.xml';
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  className="primary-btn"
-                  style={{marginTop: '0.5rem', fontSize: '1rem'}}
-                >
-                  📥 Ladda ner ATG-fil (.xml)
-                </button>
+                  <div style={{
+                    animation: 'pulse 2s infinite'
+                  }}>
+                    <button 
+                      onClick={() => {
+                        const blob = new Blob([result.xmlContent], { type: 'application/xml' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'trav-ai-system.xml';
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="primary-btn"
+                      style={{
+                        marginTop: '0.5rem', 
+                        fontSize: '1.1rem', 
+                        padding: '1.2rem 2rem', 
+                        background: 'linear-gradient(90deg, #39ff14, #00ff00)', 
+                        color: '#000', 
+                        fontWeight: 900,
+                        boxShadow: '0 0 20px rgba(57, 255, 20, 0.6)'
+                      }}
+                    >
+                      ⚡ LADDA NER OPTIMERAD XML
+                    </button>
+                  </div>
               )}
             </div>
           </div>

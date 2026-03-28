@@ -3,6 +3,9 @@ import { runMultiAgentWorkflow } from '@/lib/ai/agents';
 import { fetchLiveGameData } from '@/lib/services/atg';
 import { reduceSystem, SystemLeg, RankedHorse } from '@/lib/math/reducer';
 import { generateATGXml } from '@/lib/export/xml';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
   try {
@@ -20,7 +23,9 @@ export async function POST(req: Request) {
     const mockWeatherData = { condition: "Heavy Rain", temp: 12 };
     const rawAgentResults = await runMultiAgentWorkflow(gameData, mockWeatherData, strategy);
 
-    const formattedSummary = `[MULTI-AGENT ANALYS AKTIVERAD]\n${rawAgentResults.agentsLog.join('\n\n')}\n\n>>> SLUTDOM:\n${rawAgentResults.masterDecision}\n\nVår matematiska algoritm bantade nyss ner kupongen till att matcha din budget exakt på ${budget} kronor!`;
+    // Klipp bort JSON-koden från slutsammanfattningen så användaren slipper se koden i gränssnittet
+    const cleanMasterDecision = rawAgentResults.masterDecision.replace(/```json[\s\S]*?```/, '').trim();
+    const formattedSummary = `[MULTI-AGENT ANALYS AKTIVERAD]\n${rawAgentResults.agentsLog.join('\n\n')}\n\n>>> SLUTDOM:\n${cleanMasterDecision}\n\nVår matematiska algoritm bantade nyss ner kupongen till att matcha din budget exakt på ${budget} kronor!`;
 
     // Bygg SystemLegs med AI-rankade hästar
     // Temporärt: Rankningslogik baserad på position & odds
@@ -28,10 +33,19 @@ export async function POST(req: Request) {
     
     const systemLegs: SystemLeg[] = gameData.races.slice(0, 8).map((r, idx) => {
       const rankedHorses: RankedHorse[] = r.horses.map((h, hIdx) => {
-        // Enkel rankningslogik: Lägst odds = A, medel = B, höga = C
+        // --- STRICT AI REDUCER LINKING ---
         let rank: 'A' | 'B' | 'C' = 'C';
-        if (hIdx < 2) rank = 'A';
-        else if (hIdx < 5) rank = 'B';
+        if (rawAgentResults.parsedRankings) {
+          const aiRank = rawAgentResults.parsedRankings.find((x: any) => x.horseNum === h.num && x.raceId === r.raceId);
+          if (aiRank && (aiRank.rank === 'A' || aiRank.rank === 'B' || aiRank.rank === 'C')) {
+            rank = aiRank.rank;
+          }
+        } else {
+          // Fallback om AI:n mot förmodan misslyckades bygga JSON
+          if (hIdx < 2) rank = 'A';
+          else if (hIdx < 5) rank = 'B';
+        }
+        
         return {
           num: h.num,
           name: h.name,
@@ -97,6 +111,42 @@ export async function POST(req: Request) {
       fullSystem,
       xmlContent
     };
+
+    // --- SPARA TILL MINNESBANKEN (PRISMA DATABASE) ---
+    try {
+      if (gameData.gameId) {
+        // Kontrollera om tävlingsdagen finns
+        let raceEvent = await prisma.raceEvent.findFirst({
+          where: { id: gameData.gameId }
+        });
+        
+        if (!raceEvent) {
+          raceEvent = await prisma.raceEvent.create({
+            data: {
+              id: gameData.gameId,
+              date: new Date(),
+              track: gameData.races[0]?.trackName || "Okänd",
+              type: gameData.type
+            }
+          });
+        }
+        
+        // Logga AI:ns utlåtande
+        await prisma.aI_PredictionLog.create({
+          data: {
+            eventId: gameData.gameId,
+            strategy: strategy,
+            budget: Number(budget),
+            promptContext: JSON.stringify(gameData.races.map(r => r.raceId)),
+            aiRawResponse: rawAgentResults.masterDecision
+          }
+        });
+        console.log("✅ AI Prediction sparat i databasen!");
+      }
+    } catch (dbErr) {
+      console.error("⚠️ Fel vid sparande till Prisma databasen:", dbErr);
+      // Vi kraschar inte appen för användaren om DB är nere!
+    }
 
     return NextResponse.json(result);
   } catch (error) {

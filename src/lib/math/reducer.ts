@@ -79,25 +79,43 @@ export function reduceSystem(
   while (calculateRows(legs) * pricePerRow > budget && maxIterations > 0) {
     maxIterations--;
 
-    // Hitta loppet med flest streck (det som kostar mest)
+    // Hitta loppet som är "mest sårbart för reduktion"
+    // Istället för att bara titta på antalet streck, tittar vi på hur stark vår A-häst är.
+    // Om A-hästen är en storfavorit (rekordsmått odds), bör vi våga spika den (ta bort B-hästar först).
+    // Om A-hästen är en svag favorit (öppet lopp), bör vi BEHÅLLA garderingar där längre.
     const sortedLegs = [...legs]
       .filter(l => l.selected.length > 1) // Kan inte ta bort från spikar
-      .sort((a, b) => b.selected.length - a.selected.length);
+      .sort((a, b) => {
+        // Räkna ut "Vulnerability Score" för loppet. Högst score rensas först.
+        const aTopHorse = a.horses.find(h => h.rank === 'A') || a.horses[0];
+        const bTopHorse = b.horses.find(h => h.rank === 'A') || b.horses[0];
+        
+        // Lägre odds på A = starkare favorit = högre sårbarhet att vi rensar B-hästarna för att göra det till en spik
+        // Modifierat med hur många streck loppet redan har (vi vill ändå hyvla extremt tjocka lopp)
+        const aScore = (10 / (aTopHorse.odds || 5)) + (a.selected.length * 0.5);
+        const bScore = (10 / (bTopHorse.odds || 5)) + (b.selected.length * 0.5);
+        
+        return bScore - aScore; // Sortera fallande (mest sårbart först)
+      });
 
     if (sortedLegs.length === 0) break; // Alla är redan spikar
 
-    const fattest = sortedLegs[0];
+    const targetLeg = sortedLegs[0];
 
-    // Ta bort den sämst rankade hästen i det fetaste loppet
-    const selectedHorses = fattest.horses.filter(h => fattest.selected.includes(h.num));
+    // Ta bort den sämst rankade hästen i det valda loppet
+    const selectedHorses = targetLeg.horses.filter(h => targetLeg.selected.includes(h.num));
     const worst = selectedHorses
       .sort((a, b) => {
         const rankOrder = { 'A': 0, 'B': 1, 'C': 2 };
-        return rankOrder[b.rank] - rankOrder[a.rank]; // C först (sämst)
+        if (rankOrder[b.rank] !== rankOrder[a.rank]) {
+           return rankOrder[b.rank] - rankOrder[a.rank]; // C först (sämst)
+        }
+        // Om samma rank (t.ex två C-hästar), ta bort den med högst odds (minst sannolikt skräll)
+        return b.odds - a.odds;
       })[0];
 
     if (worst) {
-      fattest.selected = fattest.selected.filter(n => n !== worst.num);
+      targetLeg.selected = targetLeg.selected.filter(n => n !== worst.num);
     }
   }
 

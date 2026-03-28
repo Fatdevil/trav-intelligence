@@ -8,6 +8,9 @@ export type SimplifiedHorse = {
   odds: number;
   shoes: string;
   sulky: string;
+  age: number;
+  sex: string;
+  money: number;
 };
 
 export type SimplifiedRace = {
@@ -38,7 +41,7 @@ export async function fetchLiveGameData(): Promise<GameData | null> {
     
     const calData = await calRes.json();
     const games = calData.games || {};
-    const targetGame = games.V86?.[0] || games.V75?.[0] || games.V64?.[0] || games.V4?.[0];
+    const targetGame = games.V75?.[0] || games.V86?.[0] || games.V85?.[0] || games.V65?.[0] || games.V64?.[0] || games.V4?.[0];
     if (!targetGame) return null;
     
     const gameId = targetGame.id || targetGame;
@@ -71,7 +74,10 @@ export async function fetchLiveGameData(): Promise<GameData | null> {
             trainer: `${s.horse?.trainer?.firstName || ''} ${s.horse?.trainer?.lastName || ''}`.trim() || 'Okänd',
             odds: oddsPool ? (oddsPool / 100) : 0,
             shoes: s.horse?.shoes?.reported ? 'Barfota' : 'Med skor',
-            sulky: s.horse?.sulky?.reported ? 'Jänkarvagn' : 'Standard'
+            sulky: s.horse?.sulky?.reported ? 'Jänkarvagn' : 'Standard',
+            age: s.horse?.age || 0,
+            sex: s.horse?.sex || 'Okänd',
+            money: s.horse?.money || 0
           };
         })
       };
