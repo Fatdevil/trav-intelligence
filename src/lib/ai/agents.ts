@@ -5,29 +5,77 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const prisma = new PrismaClient();
 import {
-  AGENT_TACTICIAN_PROMPT,
-  AGENT_TRACK_EXPERT_PROMPT,
-  AGENT_EV_HUNTER_PROMPT,
-  AGENT_SENTIMENT_PROMPT,
-  AGENT_MARKET_PROMPT,
-  MASTER_JUDGE_PROMPT
+  AGENT_EXPLAINER_PROMPT,
+  AGENT_GOSSIP_PROMPT,
 } from './prompts';
 
 // Initialisera Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
+/**
+ * Hämta modellens value bets från databasen
+ * Dessa matas in i AI:n så den kan FÖRKLARA varför modellen valde dem.
+ */
+async function getModelValueBets(): Promise<string> {
+  try {
+    const bets: any[] = await prisma.$queryRawUnsafe(`
+      SELECT horse_name, track_name, race_number, decimal_odds, edge, driver_name, post_position, model_prob, market_prob
+      FROM value_bets 
+      WHERE tier = 'GULDTIPS'
+      ORDER BY edge DESC
+      LIMIT 20
+    `);
+
+    if (bets.length === 0) return "Inga GULDTIPS finns i databasen just nu.";
+
+    return bets.map((b: any) => {
+      const edgePct = (b.edge * 100).toFixed(1);
+      const modelPct = (b.model_prob * 100).toFixed(1);
+      const marketPct = (b.market_prob * 100).toFixed(1);
+      return `GULDTIPS: ${b.horse_name} (Lopp ${b.race_number}, ${b.track_name}) | Odds: ${b.decimal_odds} | Edge: +${edgePct}% | Modell: ${modelPct}% vs Marknad: ${marketPct}% | Kusk: ${b.driver_name} | Spår: ${b.post_position}`;
+    }).join('\n');
+  } catch (e) {
+    console.error("Value bets fetch error:", e);
+    return "Kunde inte hämta value bets — databasen kan vara tom.";
+  }
+}
+
+/**
+ * Hämta BEVAKNING-bets
+ */
+async function getWatchlistBets(): Promise<string> {
+  try {
+    const bets: any[] = await prisma.$queryRawUnsafe(`
+      SELECT horse_name, track_name, race_number, decimal_odds, edge
+      FROM value_bets 
+      WHERE tier = 'BEVAKNING'
+      ORDER BY edge DESC
+      LIMIT 10
+    `);
+
+    if (bets.length === 0) return "Inga BEVAKNING-bets.";
+
+    return bets.map((b: any) =>
+      `BEVAKNING: ${b.horse_name} (Lopp ${b.race_number}) | Odds: ${b.decimal_odds} | Edge: +${(b.edge * 100).toFixed(1)}%`
+    ).join('\n');
+  } catch (e) {
+    return "Kunde inte hämta BEVAKNING-bets.";
+  }
+}
+
 export async function runMultiAgentWorkflow(gameData: GameData, weatherInfo: any, strategy: string) {
   
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
   
-  // Skvaller-agenten får en superkraft: Live Google Search!
+  // Skvaller-agenten behåller Google Search-superkraften
   const searchModel = genAI.getGenerativeModel({ 
     model: "gemini-2.5-flash",
     tools: [{ googleSearch: {} }] as any
   });
 
-  // Vi bygger ett tajt data-objekt för att skicka till AI:n
   const currentDate = new Date().toISOString().split('T')[0];
+  
+  // Kontextdata från ATG
   const contextData = JSON.stringify({
     today: currentDate,
     weather: weatherInfo,
@@ -40,34 +88,44 @@ export async function runMultiAgentWorkflow(gameData: GameData, weatherInfo: any
     }))
   });
 
-  const promptTactician = `${AGENT_TACTICIAN_PROMPT}\n\nHär är dagens data:\n${contextData}`;
-  const promptTrack = `${AGENT_TRACK_EXPERT_PROMPT}\n\nHär är dagens data:\n${contextData}`;
-  const promptEV = `${AGENT_EV_HUNTER_PROMPT}\n\nHär är dagens data:\n${contextData}`;
-  const promptSentiment = `${AGENT_SENTIMENT_PROMPT}\n\nHär är dagens data:\n${contextData}`;
-  const promptMarket = `${AGENT_MARKET_PROMPT}\n\nHär är dagens data:\n${contextData}`;
-
   try {
-    // Kör alla 5 agenter parallellt för maximal snabbhet
-    const [tact, track, ev, sent, market] = await Promise.all([
-      model.generateContent(promptTactician),
-      model.generateContent(promptTrack),
-      model.generateContent(promptEV),
-      searchModel.generateContent(promptSentiment), // Denna agent söker nu skarpt på nätet!
-      model.generateContent(promptMarket)
+    // === STEG 1: Hämta LGBM:s value bets + features ===
+    const [valueBetsData, watchlistData] = await Promise.all([
+      getModelValueBets(),
+      getWatchlistBets()
     ]);
 
-    const tacticianReport = "🏇 Taktikern: " + tact.response.text();
-    const trackReport = "🌧️ Ban-Experten: " + track.response.text();
-    const evHunterReport = "📉 Skrälljägaren: " + ev.response.text();
-    const sentimentReport = "🔥 Skvaller-Agenten: " + sent.response.text();
-    const marketReport = "📈 Kvant-Agenten: " + market.response.text();
+    // === STEG 2: Kör Förklararen + Skvaller parallellt ===
+    const explainerPrompt = `${AGENT_EXPLAINER_PROMPT}
 
-    const agentsLog = [tacticianReport, trackReport, evHunterReport, sentimentReport, marketReport];
+--- MODELLENS VALUE BETS (LightGBM, verifierat +9.57% ROI) ---
+${valueBetsData}
 
-    // --- RAG: SMART KONTEXTUELL MINNESBANK (Vectorless Search) ---
+--- BEVAKNING ---
+${watchlistData}
+
+--- STARTLISTOR & VÄDER ---
+${contextData}`;
+
+    const gossipPrompt = `${AGENT_GOSSIP_PROMPT}
+
+--- MODELLENS GULDTIPS (sök live-info om dessa hästar) ---
+${valueBetsData}
+
+--- STARTLISTOR ---
+${contextData}`;
+
+    const [explainerResult, gossipResult] = await Promise.all([
+      model.generateContent(explainerPrompt),
+      searchModel.generateContent(gossipPrompt)
+    ]);
+
+    const explainerReport = explainerResult.response.text();
+    const gossipReport = gossipResult.response.text();
+
+    // --- RAG: Minnesbank (lärdomar från tidigare lopp) ---
     let pastLessons = "Inga historiska lärdomar finns sparade än.";
     try {
-      // 1. Hämta de 100 mest säkra insikterna
       const rawInsights = await prisma.coreInsight.findMany({
         where: { confidence: { gt: 0.4 } },
         orderBy: { confidence: 'desc' },
@@ -75,49 +133,48 @@ export async function runMultiAgentWorkflow(gameData: GameData, weatherInfo: any
       });
 
       if (rawInsights.length > 0) {
-         // 2. Beräkna "Relevance Score" genom att matcha ord i lärdomen mot dagens kontext
-         const contextString = contextData.toLowerCase();
-         const scoredInsights = rawInsights.map(insight => {
-           let score = insight.confidence; // Grundtrygghet
-           const words = insight.category.toLowerCase().split(' ').concat(insight.insightText.toLowerCase().split(' '));
-           
-           words.forEach(word => {
-             if (word.length > 3 && contextString.includes(word)) {
-               score += 0.5; // Bonus för varje matchande nyckelord t.ex. "Jägersro", "Voltstart", "Tung", Hästnamn
-             }
-           });
-           return { ...insight, score };
-         });
-
-         // 3. Sortera på högsta relevans och plocka Top 5 (De som betyder mest IDAG)
-         scoredInsights.sort((a, b) => b.score - a.score);
-         const topRelevant = scoredInsights.slice(0, 5);
-         
-         pastLessons = topRelevant.map((i: any) => `[KATEGORI: ${i.category}] LÄRDOM: ${i.insightText} (Bedömd Relevans för idag: ${i.score.toFixed(1)})`).join('\n');
+        const contextString = contextData.toLowerCase();
+        const scoredInsights = rawInsights.map(insight => {
+          let score = insight.confidence;
+          const words = insight.category.toLowerCase().split(' ').concat(insight.insightText.toLowerCase().split(' '));
+          words.forEach(word => {
+            if (word.length > 3 && contextString.includes(word)) {
+              score += 0.5;
+            }
+          });
+          return { ...insight, score };
+        });
+        scoredInsights.sort((a, b) => b.score - a.score);
+        const topRelevant = scoredInsights.slice(0, 5);
+        pastLessons = topRelevant.map((i: any) => `[${i.category}] ${i.insightText} (Relevans: ${i.score.toFixed(1)})`).join('\n');
       }
-    } catch (e) { console.error("Prisma Smarta RAG fetch fail", e) }
+    } catch (e) { console.error("RAG fetch fail", e) }
 
-    // Låt Huvuddomaren analysera experternas svar utifrån vald risk OCH det inlästa minnet!
-    const masterPrompt = `${MASTER_JUDGE_PROMPT}\n\nSTRATEGI VALD: ${strategy === 'safe' ? 'Låg Risk' : strategy === 'jackpot' ? 'Hög Risk/Miljonjakt' : 'Ren EV-Matematik'}\n\n-- MINNESBANKEN (DINA TIDIGARE LÄRDOMAR) --\n${pastLessons}\n\nRAPPORTER FRÅN EXPERTERNA:\n${agentsLog.join('\n\n')}\n\nObservera: Du måste avgöra systemets A-B-C rank utifrån dessa samlade spetskompetenser OCH dina tidigare lärdomar!`;
-    
-    const master = await model.generateContent(masterPrompt);
-    const masterDecision = master.response.text();
+    // === SAMMANSTÄLLNING ===
+    // Förklararen fungerar som huvuddomare — ingen separat judge behövs
+    const agentsLog = [
+      "🧠 Förklararen (LGBM-analys):\n" + explainerReport,
+      "🔍 Skvaller-Agenten:\n" + gossipReport,
+    ];
 
-    // --- PARSE AUTOMATIC JSON RANKING ---
-    let parsedRankings = null;
-    const jsonMatch = masterDecision.match(/```json\n([\s\S]*?)\n```/);
-    if (jsonMatch && jsonMatch[1]) {
-      try {
-        parsedRankings = JSON.parse(jsonMatch[1].trim());
-      } catch (err) {
-        console.error("Master Judge JSON Parse Error", err);
-      }
-    }
+    // Masterbeslutet ÄR Förklararens rapport + skvaller
+    const masterDecision = `# Trav Edge AI-Analys
+
+## Baserat på LightGBM-modellen (verifierat +9.57% ROI i out-of-sample)
+
+${explainerReport}
+
+---
+${gossipReport}
+
+---
+### 📚 Historiska lärdomar som påverkar analysen
+${pastLessons}`;
 
     return {
       agentsLog,
       masterDecision,
-      parsedRankings
+      parsedRankings: null // Vi använder GULDTIPS/BEVAKNING från modellen istället
     };
   } catch (error) {
     console.error("AI Error:", error);

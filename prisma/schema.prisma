@@ -67,3 +67,112 @@ model CoreInsight {
   confidence    Float    // 0.0 - 1.0 (Hur mycket litar AI:n på denna kunskap ännu?)
   updatedAt     DateTime @updatedAt
 }
+
+// ==========================================
+// FAS 2: PYTHON ML-PIPELINE (Statistisk Modell)
+// ==========================================
+
+model MLRace {
+  id            String   @id @default(uuid())
+  race_date     DateTime
+  track_name    String
+  race_number   Int
+  race_type     String
+  distance      Int
+  start_type    String
+  surface       String?
+  prize_money   Float?
+  num_starters  Int
+  created_at    DateTime @default(now())
+  
+  starters      MLRaceStarter[]
+  @@map("races")
+}
+
+model MLHorse {
+  id            String   @id @default(uuid())
+  horse_name    String
+  birth_year    Int?
+  country       String?
+  gender        String?
+  created_at    DateTime @default(now())
+
+  starters      MLRaceStarter[]
+  @@map("horses")
+}
+
+model MLRaceStarter {
+  id                  String   @id @default(uuid())
+  race_id             String
+  horse_id            String
+  post_position       Int
+  driver_name         String
+  trainer_name        String
+  starting_position   Int?
+  scratch             Boolean  @default(false)
+  final_position      Int?
+  finish_time_seconds Float?
+  km_time             Float?
+  odds_pre_race       Float?
+  odds_final          Float?
+  created_at          DateTime @default(now())
+
+  race                MLRace   @relation(fields: [race_id], references: [id])
+  horse               MLHorse  @relation(fields: [horse_id], references: [id])
+
+  features            MLFeature[]
+  predictions         MLPrediction[]
+  valueBets           MLValueBet[]
+
+  @@unique([race_id, horse_id]) // Prevent duplicate inserts
+  @@map("race_starters")
+}
+
+model MLFeature {
+  id                     String   @id @default(uuid())
+  race_id                String
+  starter_id             String
+  feature_name           String
+  feature_value          Float
+  computed_at            DateTime @default(now())
+  look_ahead_cutoff_date DateTime
+
+  starter                MLRaceStarter @relation(fields: [starter_id], references: [id])
+  @@map("features")
+}
+
+model MLPrediction {
+  id               String   @id @default(uuid())
+  race_id          String
+  starter_id       String
+  model_version    String
+  predicted_prob   Float
+  calibrated_prob  Float
+  predicted_rank   Int?
+  created_at       DateTime @default(now())
+
+  starter          MLRaceStarter @relation(fields: [starter_id], references: [id])
+  @@map("predictions")
+}
+
+model MLValueBet {
+  id               String   @id @default(uuid())
+  race_id          String
+  starter_id       String
+  race_date        DateTime
+  track_name       String
+  race_number      Int
+  horse_name       String
+  driver_name      String
+  post_position    Int
+  model_prob       Float
+  market_prob      Float
+  decimal_odds     Float
+  edge             Float
+  expected_value   Float
+  kelly_stake      Float
+  created_at       DateTime @default(now())
+
+  starter          MLRaceStarter @relation(fields: [starter_id], references: [id])
+  @@map("value_bets")
+}
