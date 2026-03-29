@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 // GET /api/races/[id]/starters — Startfält med features och edge-data
 export async function GET(
@@ -8,33 +10,33 @@ export async function GET(
 ) {
   try {
     const { id: raceId } = await params;
-    const db = getDb();
 
     // Hämta loppet
-    const race = db.prepare(`
+    const raceRows: any[] = await prisma.$queryRawUnsafe(`
       SELECT id, race_number, track_name, distance, start_type, prize_money, num_starters, race_date
-      FROM races WHERE id = ?
-    `).get(raceId) as any;
+      FROM races WHERE id = $1
+    `, raceId);
 
-    if (!race) {
+    if (raceRows.length === 0) {
       return NextResponse.json({ error: 'Loppet hittades inte.' }, { status: 404 });
     }
+    const race = raceRows[0];
 
     // Hämta startfält
-    const starters = db.prepare(`
+    const starters: any[] = await prisma.$queryRawUnsafe(`
       SELECT rs.id AS starter_id, rs.post_position, rs.driver_name, rs.trainer_name,
              rs.km_time, rs.odds_final, rs.odds_pre_race, rs.final_position, rs.scratch,
-             h.horse_name
+             h.name as horse_name
       FROM race_starters rs
       JOIN horses h ON rs.horse_id = h.id
-      WHERE rs.race_id = ? AND rs.scratch = 0
+      WHERE rs.race_id = $1 AND rs.scratch = false
       ORDER BY rs.post_position ASC
-    `).all(raceId) as any[];
+    `, raceId);
 
     // Hämta features per starter (EAV → objekt)
-    const featureRows = db.prepare(`
-      SELECT starter_id, feature_name, feature_value FROM features WHERE race_id = ?
-    `).all(raceId) as any[];
+    const featureRows: any[] = await prisma.$queryRawUnsafe(`
+      SELECT starter_id, feature_name, feature_value FROM features WHERE race_id = $1
+    `, raceId);
 
     const featuresByStarter: Record<string, Record<string, number>> = {};
     featureRows.forEach(f => {
@@ -43,10 +45,10 @@ export async function GET(
     });
 
     // Hämta value bets för detta lopp
-    const valueBets = db.prepare(`
+    const valueBets: any[] = await prisma.$queryRawUnsafe(`
       SELECT starter_id, model_prob, market_prob, decimal_odds, edge, expected_value, kelly_stake
-      FROM value_bets WHERE race_id = ?
-    `).all(raceId) as any[];
+      FROM value_bets WHERE race_id = $1
+    `, raceId);
 
     const vbByStarter: Record<string, any> = {};
     valueBets.forEach(vb => { vbByStarter[vb.starter_id] = vb; });
@@ -85,9 +87,9 @@ export async function GET(
       race: {
         id: race.id,
         num: race.race_number,
-        distance: `${race.distance} m ${race.start_type}`,
+        distance: `${race.distance} m ${race.start_type || ''}`.trim(),
         trackName: race.track_name,
-        raceDate: race.race_date?.split('T')[0] || '',
+        raceDate: race.race_date ? String(race.race_date).split('T')[0] : '',
         prize: race.prize_money,
         starters: race.num_starters,
       },
@@ -95,6 +97,6 @@ export async function GET(
     });
   } catch (error: any) {
     console.error('Starters API error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message, horses: [] }, { status: 200 });
   }
 }

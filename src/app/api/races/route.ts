@@ -1,48 +1,50 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 // GET /api/races — Hämtar senaste loppdagens alla lopp med startfält
 export async function GET() {
   try {
-    const db = getDb();
-
     // Hitta senaste loppdatumet
-    const latest = db.prepare('SELECT race_date FROM races ORDER BY race_date DESC LIMIT 1').get() as any;
-    if (!latest) {
+    const latestRow: any[] = await prisma.$queryRawUnsafe(
+      'SELECT race_date FROM races ORDER BY race_date DESC LIMIT 1'
+    );
+    if (latestRow.length === 0) {
       return NextResponse.json({ races: [], message: 'Inga lopp i databasen.' });
     }
 
-    const latestDate = latest.race_date.split('T')[0];
+    const latestDate = String(latestRow[0].race_date).split('T')[0];
 
     // Hämta alla lopp från den dagen
-    const races = db.prepare(`
+    const races: any[] = await prisma.$queryRawUnsafe(`
       SELECT id, race_number, track_name, distance, start_type, prize_money, num_starters, race_date
       FROM races
-      WHERE race_date LIKE ?
+      WHERE CAST(race_date AS TEXT) LIKE $1
       ORDER BY race_number ASC
-    `).all(`${latestDate}%`) as any[];
+    `, `${latestDate}%`);
 
     // Hämta hästar per lopp
-    const formatted = races.map(race => {
-      const starters = db.prepare(`
+    const formatted = await Promise.all(races.map(async (race: any) => {
+      const starters: any[] = await prisma.$queryRawUnsafe(`
         SELECT rs.id AS starter_id, rs.post_position, rs.driver_name, rs.trainer_name,
                rs.km_time, rs.odds_final, rs.odds_pre_race, rs.final_position, rs.scratch,
-               h.horse_name
+               h.name as horse_name
         FROM race_starters rs
         JOIN horses h ON rs.horse_id = h.id
-        WHERE rs.race_id = ? AND rs.scratch = 0
+        WHERE rs.race_id = $1 AND rs.scratch = false
         ORDER BY rs.post_position ASC
-      `).all(race.id) as any[];
+      `, race.id);
 
       return {
         id: race.id,
         num: race.race_number,
-        distance: `${race.distance} m ${race.start_type}`,
+        distance: `${race.distance} m ${race.start_type || ''}`.trim(),
         trackName: race.track_name,
         raceDate: latestDate,
         prize: race.prize_money ? `${Math.round(race.prize_money).toLocaleString('sv-SE')} kr` : null,
         starters: race.num_starters,
-        horses: starters.map(s => ({
+        horses: starters.map((s: any) => ({
           post: s.post_position,
           name: s.horse_name,
           driver: s.driver_name,
@@ -54,7 +56,7 @@ export async function GET() {
           starterId: s.starter_id,
         })),
       };
-    });
+    }));
 
     return NextResponse.json({
       races: formatted,
@@ -63,6 +65,6 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error('Races API error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message, races: [] }, { status: 200 });
   }
 }

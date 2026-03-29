@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 // GET /api/value-bets — Edge-bets sorterat på högst edge
 export async function GET() {
   try {
-    const db = getDb();
-
-    const bets = db.prepare(`
+    const bets: any[] = await prisma.$queryRawUnsafe(`
       SELECT id, horse_name, driver_name, track_name, race_number, race_date,
              post_position, model_prob, market_prob, decimal_odds, edge, expected_value, kelly_stake, tier
       FROM value_bets
@@ -14,15 +14,15 @@ export async function GET() {
         CASE WHEN tier = 'GULDTIPS' THEN 0 ELSE 1 END,
         edge DESC
       LIMIT 50
-    `).all() as any[];
+    `);
 
-    const formatted = bets.map(vb => ({
+    const formatted = bets.map((vb: any) => ({
       id: vb.id,
       horseName: vb.horse_name,
       driverName: vb.driver_name,
       trackName: vb.track_name,
       raceNumber: vb.race_number,
-      raceDate: vb.race_date?.split('T')[0] || '',
+      raceDate: vb.race_date ? String(vb.race_date).split('T')[0] : '',
       postPosition: vb.post_position,
       modelProb: Math.round(vb.model_prob * 100),
       marketProb: Math.round(vb.market_prob * 100),
@@ -46,6 +46,6 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error('Value-bets API error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message, bets: [], count: 0, guldtipsCount: 0, bevakningCount: 0 }, { status: 200 });
   }
 }
