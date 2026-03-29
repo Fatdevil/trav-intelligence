@@ -3,16 +3,13 @@ Edge Threshold Optimizer — Hittar optimal minsta edge for positiv ROI.
 Testar alla edge-trosklar fran 1% till 30% i steg om 0.5%.
 """
 import os
-import sqlite3
 import pandas as pd
 import numpy as np
 import joblib
-from config import DB_PATH
+from config import get_connection
 
 def run_optimizer():
-    print("[OPTIMIZER] Booting Edge Threshold Optimizer...")
-    db_path = DB_PATH.replace("file:", "")
-    conn = sqlite3.connect(db_path)
+    conn = get_connection()
     
     # 1. Laddda Wide Matrix
     query = """

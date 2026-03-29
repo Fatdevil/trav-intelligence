@@ -1,19 +1,16 @@
 import os
-import sqlite3
 import pandas as pd
 import numpy as np
 import joblib
 import datetime
 import uuid
-from config import DB_PATH, DB_URL_SQLALCHEMY
+from config import DB_URL_SQLALCHEMY, get_connection
 from sqlalchemy import create_engine, text
 import warnings
 warnings.filterwarnings("ignore")
 
 def run_value_calculator():
-    print("[VALUE] Booting Value Edge Calculator...")
-    db_path = DB_PATH.replace("file:", "")
-    conn = sqlite3.connect(db_path)
+    conn = get_connection()
     
     # 1. Läs hela Wide Matrix + Label data + Metadata
     query = """

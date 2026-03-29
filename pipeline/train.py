@@ -1,19 +1,16 @@
 import os
-import sqlite3
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
 import joblib
 from sklearn.metrics import log_loss, brier_score_loss
 import warnings
-from config import DB_PATH
+from config import get_connection
 
 warnings.filterwarnings("ignore")
 
 def train_model():
-    print("[TRAIN] Extracting Feature EAV Matrix from Database...")
-    db_path = DB_PATH.replace("file:", "")
-    conn = sqlite3.connect(db_path)
+    conn = get_connection()
     
     query = """
     SELECT 

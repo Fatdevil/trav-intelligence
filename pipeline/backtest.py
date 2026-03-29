@@ -1,19 +1,16 @@
 import os
-import sqlite3
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.frozen import FrozenEstimator
-from config import DB_PATH
+from config import get_connection
 import warnings
 
 warnings.filterwarnings("ignore")
 
 def run_backtest():
-    print("📈 Booting Walk-Forward Simulator Matrix...")
-    db_path = DB_PATH.replace("file:", "")
-    conn = sqlite3.connect(db_path)
+    conn = get_connection()
     
     query = """
     SELECT 

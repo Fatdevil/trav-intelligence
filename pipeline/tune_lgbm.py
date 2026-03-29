@@ -3,21 +3,18 @@ LightGBM Hyperparameter Tuner — Grid search over key parameters.
 Optimizes for minimal log-loss on walk-forward validation set.
 """
 import os
-import sqlite3
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
 from sklearn.metrics import log_loss
 from itertools import product
 import warnings
-from config import DB_PATH
+from config import get_connection
 
 warnings.filterwarnings("ignore")
 
 def run_tuning():
-    print("[TUNER] Booting Hyperparameter Tuner...")
-    db_path = DB_PATH.replace("file:", "")
-    conn = sqlite3.connect(db_path)
+    conn = get_connection()
     
     query = """
     SELECT f.race_id, f.starter_id, f.feature_name, f.feature_value, 
