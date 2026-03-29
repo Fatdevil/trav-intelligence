@@ -22,7 +22,7 @@ export async function GET() {
       driverName: vb.driver_name,
       trackName: vb.track_name,
       raceNumber: vb.race_number,
-      raceDate: vb.race_date ? String(vb.race_date).split('T')[0] : '',
+      raceDate: vb.race_date ? new Date(vb.race_date).toISOString().split('T')[0] : '',
       postPosition: vb.post_position,
       modelProb: Math.round(vb.model_prob * 100),
       marketProb: Math.round(vb.market_prob * 100),

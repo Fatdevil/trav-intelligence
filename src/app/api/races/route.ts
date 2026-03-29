@@ -14,7 +14,8 @@ export async function GET() {
       return NextResponse.json({ races: [], message: 'Inga lopp i databasen.' });
     }
 
-    const latestDate = String(latestRow[0].race_date).split('T')[0];
+    const d = new Date(latestRow[0].race_date);
+    const latestDate = d.toISOString().split('T')[0];
 
     // Hämta alla lopp från den dagen
     const races: any[] = await prisma.$queryRawUnsafe(`
