@@ -100,19 +100,33 @@ def run_value_calculator():
         })
         
     engine = create_engine(DB_URL_SQLALCHEMY)
-    insert_clause = "INSERT OR IGNORE" if "sqlite" in DB_URL_SQLALCHEMY.lower() else "INSERT"
-    conflict_clause = "ON CONFLICT DO NOTHING" if "postgres" in DB_URL_SQLALCHEMY.lower() else ""
-
-    sql_value = text(f"""
-        {insert_clause} INTO value_bets 
-        (id, race_id, starter_id, race_date, track_name, race_number, horse_name, driver_name, post_position, model_prob, market_prob, decimal_odds, edge, expected_value, kelly_stake, tier, created_at)
-        VALUES (:id, :race_id, :starter_id, :race_date, :track_name, :race_number, :horse_name, :driver_name, :post_position, :model_prob, :market_prob, :decimal_odds, :edge, :expected_value, :kelly_stake, :tier, :computed_at)
-        {conflict_clause}
-    """)
-
+    
     with engine.begin() as conn:
-        conn.execute(text("DELETE FROM value_bets")) 
-        if records_to_insert:
+        conn.execute(text("DELETE FROM value_bets"))
+    
+    if "postgres" in DB_URL_SQLALCHEMY.lower() and records_to_insert:
+        import psycopg2
+        from psycopg2.extras import execute_batch
+        pg_conn = psycopg2.connect(DB_URL_SQLALCHEMY.replace("postgresql+psycopg2://", "postgresql://"))
+        cur = pg_conn.cursor()
+        
+        sql = """INSERT INTO value_bets 
+            (id, race_id, starter_id, race_date, track_name, race_number, horse_name, driver_name, post_position, model_prob, market_prob, decimal_odds, edge, expected_value, kelly_stake, created_at)
+            VALUES (%(id)s, %(race_id)s, %(starter_id)s, %(race_date)s, %(track_name)s, %(race_number)s, %(horse_name)s, %(driver_name)s, %(post_position)s, %(model_prob)s, %(market_prob)s, %(decimal_odds)s, %(edge)s, %(expected_value)s, %(kelly_stake)s, %(computed_at)s)
+            ON CONFLICT DO NOTHING"""
+        
+        execute_batch(cur, sql, records_to_insert)
+        pg_conn.commit()
+        cur.close()
+        pg_conn.close()
+        print(f"[DB] {len(records_to_insert)} value bets insatta via psycopg2")
+    elif records_to_insert:
+        sql_value = text("""
+            INSERT OR IGNORE INTO value_bets 
+            (id, race_id, starter_id, race_date, track_name, race_number, horse_name, driver_name, post_position, model_prob, market_prob, decimal_odds, edge, expected_value, kelly_stake, tier, created_at)
+            VALUES (:id, :race_id, :starter_id, :race_date, :track_name, :race_number, :horse_name, :driver_name, :post_position, :model_prob, :market_prob, :decimal_odds, :edge, :expected_value, :kelly_stake, :tier, :computed_at)
+        """)
+        with engine.begin() as conn:
             conn.execute(sql_value, records_to_insert)
             
     # 8. Rapportera ROI Matrix

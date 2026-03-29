@@ -103,7 +103,7 @@ def parse_and_ingest_game(game_id: str):
                 })
                 races_inserted += res.rowcount
             except Exception as e:
-                pass # Already exists or constraint error
+                print(f"  [WARN] Race insert error: {e}")
 
             # Hästar & Starters
             for starter in race.get('starts', []):
@@ -126,8 +126,8 @@ def parse_and_ingest_game(game_id: str):
                         "created": datetime.datetime.now().isoformat()
                     })
                     horses_inserted += res_h.rowcount
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"  [WARN] Horse insert error: {e}")
 
                 # Result parsing
                 res_data = starter.get('result', {})
@@ -161,8 +161,8 @@ def parse_and_ingest_game(game_id: str):
                 if isinstance(shoes, dict) and shoes.get('reported'):
                     front = shoes.get('front', {})
                     back = shoes.get('back', {})
-                    shoes_front = 0 if front.get('hasShoe', True) else 1  # 1 = barfota
-                    shoes_back = 0 if back.get('hasShoe', True) else 1
+                    shoes_front = True if front.get('hasShoe', True) else False
+                    shoes_back = True if back.get('hasShoe', True) else False
 
                 # Sulky type
                 sulky = horse.get('sulky', {}) or starter.get('sulky', {}) or {}
@@ -171,7 +171,7 @@ def parse_and_ingest_game(game_id: str):
                     sulky_type = (sulky.get('type', {}) or {}).get('code', None)
 
                 # Gallop flag
-                galloped = 1 if res_data.get('galloped') else 0
+                galloped = True if res_data.get('galloped') else False
 
                 try:
                     sql_starter = text(f"""

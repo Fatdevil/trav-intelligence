@@ -5,26 +5,31 @@ import numpy as np
 import datetime
 import uuid
 from sqlalchemy import create_engine, text
-from config import DB_URL_SQLALCHEMY, DB_PATH
+from config import DB_URL_SQLALCHEMY, DB_PATH, IS_POSTGRES
 
 def compute_features():
     print("[FEATURES] Booting DuckDB Feature Engineering Engine...")
     
-    # 1. Starta DuckDB och anslut till den lokala SQLite-filen.
-    # DuckDB kan köra brutalt snabba in-memory window functions över SQLite.
+    # 1. Starta DuckDB och anslut till databasen.
     con = duckdb.connect()
     
-    # Eftersom API:t ibland heter dbPath och är "file:./", rensar vi det
     safe_db_path = DB_PATH.replace("file:", "")
     print(f"Laddar DuckDB-koppling mot: {safe_db_path}")
 
-    # Fallback om tillägget saknas
-    try:
-        con.execute("INSTALL sqlite;")
-    except: pass
-    
-    con.execute("LOAD sqlite;")
-    con.execute(f"ATTACH '{safe_db_path}' AS devdb (TYPE sqlite);")
+    if IS_POSTGRES:
+        # PostgreSQL: Använd postgres_scanner extension
+        try:
+            con.execute("INSTALL postgres;")
+        except: pass
+        con.execute("LOAD postgres;")
+        con.execute(f"ATTACH '{safe_db_path}' AS devdb (TYPE postgres);")
+    else:
+        # SQLite: Använd sqlite extension
+        try:
+            con.execute("INSTALL sqlite;")
+        except: pass
+        con.execute("LOAD sqlite;")
+        con.execute(f"ATTACH '{safe_db_path}' AS devdb (TYPE sqlite);")
 
     # 2. Den gigantiska Sub-Query formeln. 
     # Med "Strict Temporal Isolation" (Look-Ahead Bias protection via < b.race_date).
@@ -217,24 +222,44 @@ def compute_features():
     print(f"[FEATURES] Infogar {len(records_to_insert)} rader i features-tabellen...")
     engine = create_engine(DB_URL_SQLALCHEMY)
     
-    insert_clause = "INSERT OR IGNORE" if "sqlite" in DB_URL_SQLALCHEMY.lower() else "INSERT"
-    conflict_clause = "ON CONFLICT DO NOTHING" if "postgres" in DB_URL_SQLALCHEMY.lower() else ""
-
-    sql_feature = text(f"""
-        {insert_clause} INTO features 
-        (id, race_id, starter_id, feature_name, feature_value, computed_at, look_ahead_cutoff_date)
-        VALUES (:id, :race_id, :starter_id, :feature_name, :feature_value, :computed_at, :look_ahead_cutoff_date)
-        {conflict_clause}
-    """)
-
+    # Töm gamla features
     with engine.begin() as conn:
-        # Töm de gamla funktionerna innan batch-insert för att inte stapla onödig data ifall vi kör scriptet dubbelt
         conn.execute(text("DELETE FROM features"))
+    
+    if IS_POSTGRES:
+        # Direkt psycopg2 för snabb batch-insert
+        import psycopg2
+        from psycopg2.extras import execute_batch
+        pg_conn = psycopg2.connect(DB_URL_SQLALCHEMY.replace("postgresql+psycopg2://", "postgresql://"))
+        cur = pg_conn.cursor()
         
-        # Använd executemany (som är extremt effektivt via SQLAlchemy för bulk list inläggning)
-        conn.execute(sql_feature, records_to_insert)
+        sql = """INSERT INTO features 
+            (id, race_id, starter_id, feature_name, feature_value, computed_at, look_ahead_cutoff_date)
+            VALUES (%(id)s, %(race_id)s, %(starter_id)s, %(feature_name)s, %(feature_value)s, %(computed_at)s, %(look_ahead_cutoff_date)s)
+            ON CONFLICT DO NOTHING"""
+        
+        BATCH_SIZE = 5000
+        total = len(records_to_insert)
+        for i in range(0, total, BATCH_SIZE):
+            batch = records_to_insert[i:i+BATCH_SIZE]
+            execute_batch(cur, sql, batch)
+            pg_conn.commit()
+            print(f"  [BATCH] {min(i+BATCH_SIZE, total)}/{total} rader insatta")
+        
+        cur.close()
+        pg_conn.close()
+    else:
+        # SQLite: original SQLAlchemy approach
+        sql_feature = text("""
+            INSERT OR IGNORE INTO features 
+            (id, race_id, starter_id, feature_name, feature_value, computed_at, look_ahead_cutoff_date)
+            VALUES (:id, :race_id, :starter_id, :feature_name, :feature_value, :computed_at, :look_ahead_cutoff_date)
+        """)
+        with engine.begin() as conn:
+            conn.execute(sql_feature, records_to_insert)
 
     print("[DONE] FEATURIZATION COMPLETE!")
     
 if __name__ == "__main__":
     compute_features()
+

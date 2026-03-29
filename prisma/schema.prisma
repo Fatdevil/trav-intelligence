@@ -115,6 +115,10 @@ model MLRaceStarter {
   km_time             Float?
   odds_pre_race       Float?
   odds_final          Float?
+  shoes_front         Boolean? @default(true)
+  shoes_back          Boolean? @default(true)
+  sulky_type          String?
+  galloped            Boolean? @default(false)
   created_at          DateTime @default(now())
 
   race                MLRace   @relation(fields: [race_id], references: [id])
@@ -133,7 +137,7 @@ model MLFeature {
   race_id                String
   starter_id             String
   feature_name           String
-  feature_value          Float
+  feature_value          Float?
   computed_at            DateTime @default(now())
   look_ahead_cutoff_date DateTime
 
