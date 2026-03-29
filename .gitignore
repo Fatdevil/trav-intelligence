@@ -42,3 +42,4 @@ next-env.d.ts
 prisma/dev.db
 models/calibrator_v1.pkl
 pipeline/__pycache__/
+.env
