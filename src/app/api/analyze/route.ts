@@ -35,8 +35,8 @@ export async function POST(req: Request) {
       const rankedHorses: RankedHorse[] = r.horses.map((h, hIdx) => {
         // --- STRICT AI REDUCER LINKING ---
         let rank: 'A' | 'B' | 'C' = 'C';
-        if (rawAgentResults.parsedRankings) {
-          const aiRank = rawAgentResults.parsedRankings.find((x: any) => x.horseNum === h.num && x.raceId === r.raceId);
+        if (Array.isArray(rawAgentResults.parsedRankings)) {
+          const aiRank = (rawAgentResults.parsedRankings as any[]).find((x: any) => x.horseNum === h.num && x.raceId === r.raceId);
           if (aiRank && (aiRank.rank === 'A' || aiRank.rank === 'B' || aiRank.rank === 'C')) {
             rank = aiRank.rank;
           }

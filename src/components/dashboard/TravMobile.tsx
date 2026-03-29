@@ -157,7 +157,7 @@ export default function TravMobile() {
             scrollbarWidth: "none",
           }}>
             {races.map(r => {
-              const hasEdge = r.horses.some(h => !h.scratch && (h.modelProb - h.marketProb) >= 5);
+              const hasEdge = r.horses.some((h: any) => !h.scratch && (h.modelProb - h.marketProb > 0.05));
               const isActive = activeRace.id === r.id;
               return (
                 <button key={r.id} className="hnav-btn" onClick={() => { setActiveRace(r); setExpandedHorse(null); }} style={{
@@ -196,11 +196,11 @@ export default function TravMobile() {
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
-              {activeRace.horses.filter(h => !h.scratch && (h.modelProb - h.marketProb) >= 5).length > 0 ? (
+              {activeRace.horses.filter((h: any) => !h.scratch && (h.modelProb - h.marketProb) >= 5).length > 0 ? (
                 <div>
                   <div style={{ fontSize: "10px", color: TEXT3, letterSpacing: "0.06em", marginBottom: "2px" }}>EDGE</div>
                   <div style={{ fontSize: "20px", color: AMBER, fontWeight: 500, lineHeight: 1 }}>
-                    {activeRace.horses.filter(h => !h.scratch && (h.modelProb - h.marketProb) >= 5).length}
+                    {activeRace.horses.filter((h: any) => !h.scratch && (h.modelProb - h.marketProb) >= 5).length}
                   </div>
                 </div>
               ) : (
@@ -211,7 +211,7 @@ export default function TravMobile() {
 
           {/* Horse cards */}
           <div style={{ padding: "8px 0" }}>
-            {activeRace.horses.map(h => {
+            {activeRace.horses.map((h: any) => {
               const edge = h.modelProb - h.marketProb;
               const hasEdge = !h.scratch && edge >= 5;
               const isExpanded = expandedHorse === h.post;
