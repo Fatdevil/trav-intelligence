@@ -1,3 +1,4 @@
+"use client";
 import { useState, useRef, useEffect, useMemo } from "react";
 
 const AMBER = "#D4A843";
