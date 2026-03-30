@@ -56,9 +56,16 @@ def compute_features():
             rs.shoes_front,
             rs.shoes_back,
             rs.sulky_type,
-            rs.galloped
+            rs.galloped,
+            rs.shoe_change_front,
+            rs.shoe_change_back,
+            h2.birth_year,
+            h2.gender AS horse_gender,
+            h2.record_time AS horse_record_time,
+            h2.career_earnings
         FROM devdb.race_starters rs
         JOIN devdb.races r ON rs.race_id = r.id
+        LEFT JOIN devdb.horses h2 ON rs.horse_id = h2.id
         WHERE rs.scratch = false
     ),
     Computed AS (
@@ -165,7 +172,24 @@ def compute_features():
             EXTRACT(DOW FROM b.race_date) AS weekday,
             
             -- 16. Storlopp-flagga (lordag = V75/V86 huvuddag)
-            (CASE WHEN EXTRACT(DOW FROM b.race_date) IN (6, 0) THEN 1.0 ELSE 0.0 END) AS is_weekend_race
+            (CASE WHEN EXTRACT(DOW FROM b.race_date) IN (6, 0) THEN 1.0 ELSE 0.0 END) AS is_weekend_race,
+
+            -- NYA FEATURES (Fas 25)
+            -- 17. Häst-ålder (beräknad från födelseår)
+            (EXTRACT(YEAR FROM b.race_date) - COALESCE(b.birth_year, EXTRACT(YEAR FROM b.race_date))) AS horse_age,
+            
+            -- 18. Kön-flaggor (valack = gelding, sto = mare)
+            (CASE WHEN LOWER(COALESCE(b.horse_gender, '')) IN ('gelding', 'valack') THEN 1.0 ELSE 0.0 END) AS is_gelding,
+            (CASE WHEN LOWER(COALESCE(b.horse_gender, '')) IN ('mare', 'sto') THEN 1.0 ELSE 0.0 END) AS is_mare,
+            
+            -- 19. Rekordtid normaliserad (lägre = snabbare häst)
+            COALESCE(b.horse_record_time, 0) AS record_time_norm,
+            
+            -- 20. Skobyte-signal (byte = formindikator)
+            (CASE WHEN COALESCE(b.shoe_change_front, false) OR COALESCE(b.shoe_change_back, false) THEN 1.0 ELSE 0.0 END) AS shoe_change_signal,
+            
+            -- 21. Karriärintjäning (log-transformerad)
+            LN(COALESCE(b.career_earnings, 1) + 1) AS career_earnings_log
 
         FROM Base b
     )
@@ -198,7 +222,10 @@ def compute_features():
         # Sko- och galoppdata (Fas 10)
         'barefoot_front', 'barefoot_score', 'gallop_rate_last5', 'sulky_american',
         # Sasongsfeatures (Fas 15)
-        'month_sin', 'month_cos', 'weekday', 'is_weekend_race'
+        'month_sin', 'month_cos', 'weekday', 'is_weekend_race',
+        # Nya features (Fas 25)
+        'horse_age', 'is_gelding', 'is_mare', 'record_time_norm',
+        'shoe_change_signal', 'career_earnings_log'
     ]
     
     records_to_insert = []

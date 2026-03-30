@@ -113,19 +113,49 @@ def parse_and_ingest_game(game_id: str):
                 try:
                     sql_horse = text(f"""
                         {insert_clause} INTO horses 
-                        (id, horse_name, birth_year, country, gender, created_at)
-                        VALUES (:id, :name, :byear, :ctr, :gend, :created)
+                        (id, horse_name, birth_year, country, gender, record_time, career_earnings, created_at)
+                        VALUES (:id, :name, :byear, :ctr, :gend, :rt, :ce, :created)
                         {conflict_clause}
                     """)
+                    
+                    # Parse record time
+                    record = horse.get('record', {})
+                    record_time = None
+                    if isinstance(record, dict):
+                        rt = record.get('time', {})
+                        if isinstance(rt, dict):
+                            rm = rt.get('minutes', 0) or 0
+                            rs_val = rt.get('seconds', 0) or 0
+                            rt_val = rt.get('tenths', 0) or 0
+                            if rm > 0 or rs_val > 0:
+                                record_time = float(rm * 60 + rs_val + rt_val / 10.0)
+                    
+                    career_earnings = horse.get('money', None)
+                    if career_earnings and isinstance(career_earnings, (int, float)):
+                        career_earnings = float(career_earnings)
+                    else:
+                        career_earnings = None
+                    
                     res_h = conn.execute(sql_horse, {
                         "id": horse_id,
                         "name": horse.get('name', 'Unknown'),
-                        "byear": horse.get('age', 0), # Fallback mapping age to birth year temporarily
+                        "byear": horse.get('age', 0),
                         "ctr": horse.get('nationality', 'Unknown'),
                         "gend": horse.get('sex', 'Unknown'),
+                        "rt": record_time,
+                        "ce": career_earnings,
                         "created": datetime.datetime.now().isoformat()
                     })
                     horses_inserted += res_h.rowcount
+                    
+                    # Update existing horse with new fields if they were missing
+                    if res_h.rowcount == 0 and (record_time or career_earnings):
+                        conn.execute(text("""
+                            UPDATE horses 
+                            SET record_time = COALESCE(:rt, record_time),
+                                career_earnings = COALESCE(:ce, career_earnings)
+                            WHERE id = :id
+                        """), {"id": horse_id, "rt": record_time, "ce": career_earnings})
                 except Exception as e:
                     print(f"  [WARN] Horse insert error: {e}")
 
@@ -173,11 +203,20 @@ def parse_and_ingest_game(game_id: str):
                 # Gallop flag
                 galloped = True if res_data.get('galloped') else False
 
+                # Shoe changes
+                shoe_change_front = None
+                shoe_change_back = None
+                if isinstance(shoes, dict) and shoes.get('reported'):
+                    front_sc = shoes.get('front', {})
+                    back_sc = shoes.get('back', {})
+                    shoe_change_front = bool(front_sc.get('changed', False)) if isinstance(front_sc, dict) else False
+                    shoe_change_back = bool(back_sc.get('changed', False)) if isinstance(back_sc, dict) else False
+
                 try:
                     sql_starter = text(f"""
                         {insert_clause} INTO race_starters 
-                        (id, race_id, horse_id, post_position, driver_name, trainer_name, scratch, final_position, km_time, odds_final, odds_pre_race, shoes_front, shoes_back, sulky_type, galloped, created_at)
-                        VALUES (:id, :rid, :hid, :post, :drv, :trn, :scr, :fin, :km, :odds, :odds, :sf, :sb, :sulky, :gal, :created)
+                        (id, race_id, horse_id, post_position, driver_name, trainer_name, scratch, final_position, km_time, odds_final, odds_pre_race, shoes_front, shoes_back, sulky_type, galloped, shoe_change_front, shoe_change_back, created_at)
+                        VALUES (:id, :rid, :hid, :post, :drv, :trn, :scr, :fin, :km, :odds, :odds, :sf, :sb, :sulky, :gal, :scf, :scb, :created)
                         {conflict_clause}
                     """)
                     res_s = conn.execute(sql_starter, {
@@ -195,6 +234,8 @@ def parse_and_ingest_game(game_id: str):
                         "sb": shoes_back,
                         "sulky": sulky_type,
                         "gal": galloped,
+                        "scf": shoe_change_front,
+                        "scb": shoe_change_back,
                         "created": datetime.datetime.now().isoformat()
                     })
                     starters_inserted += res_s.rowcount

@@ -255,9 +255,16 @@ def compute_features_for_races(race_ids):
             rs.shoes_front,
             rs.shoes_back,
             rs.sulky_type,
-            rs.galloped
+            rs.galloped,
+            rs.shoe_change_front,
+            rs.shoe_change_back,
+            h2.birth_year,
+            h2.gender AS horse_gender,
+            h2.record_time AS horse_record_time,
+            h2.career_earnings
         FROM devdb.race_starters rs
         JOIN devdb.races r ON rs.race_id = r.id
+        LEFT JOIN devdb.horses h2 ON rs.horse_id = h2.id
         WHERE rs.scratch = false
     ),
     Computed AS (
@@ -298,7 +305,14 @@ def compute_features_for_races(race_ids):
             SIN(2 * 3.14159 * EXTRACT(MONTH FROM b.race_date) / 12.0) AS month_sin,
             COS(2 * 3.14159 * EXTRACT(MONTH FROM b.race_date) / 12.0) AS month_cos,
             EXTRACT(DOW FROM b.race_date) AS weekday,
-            (CASE WHEN EXTRACT(DOW FROM b.race_date) IN (6, 0) THEN 1.0 ELSE 0.0 END) AS is_weekend_race
+            (CASE WHEN EXTRACT(DOW FROM b.race_date) IN (6, 0) THEN 1.0 ELSE 0.0 END) AS is_weekend_race,
+            -- NYA FEATURES (Fas 25)
+            (EXTRACT(YEAR FROM b.race_date) - COALESCE(b.birth_year, EXTRACT(YEAR FROM b.race_date))) AS horse_age,
+            (CASE WHEN LOWER(COALESCE(b.horse_gender, '')) IN ('gelding', 'valack') THEN 1.0 ELSE 0.0 END) AS is_gelding,
+            (CASE WHEN LOWER(COALESCE(b.horse_gender, '')) IN ('mare', 'sto') THEN 1.0 ELSE 0.0 END) AS is_mare,
+            COALESCE(b.horse_record_time, 0) AS record_time_norm,
+            (CASE WHEN COALESCE(b.shoe_change_front, false) OR COALESCE(b.shoe_change_back, false) THEN 1.0 ELSE 0.0 END) AS shoe_change_signal,
+            LN(COALESCE(b.career_earnings, 1) + 1) AS career_earnings_log
         FROM Base b
         WHERE b.race_id IN ({race_filter})
     )
@@ -337,7 +351,10 @@ def score_and_save(df, race_ids):
         'driver_track_distance_winrate', 'trainer_change_flag',
         'comeback_signal', 'overperformance_flag',
         'barefoot_front', 'barefoot_score', 'gallop_rate_last5', 'sulky_american',
-        'month_sin', 'month_cos', 'weekday', 'is_weekend_race'
+        'month_sin', 'month_cos', 'weekday', 'is_weekend_race',
+        # Nya features (Fas 25)
+        'horse_age', 'is_gelding', 'is_mare', 'record_time_norm',
+        'shoe_change_signal', 'career_earnings_log'
     ]
     
     # Log-odds
@@ -494,7 +511,10 @@ def save_features_to_db(df, race_ids):
         'driver_track_distance_winrate', 'trainer_change_flag',
         'comeback_signal', 'overperformance_flag',
         'barefoot_front', 'barefoot_score', 'gallop_rate_last5', 'sulky_american',
-        'month_sin', 'month_cos', 'weekday', 'is_weekend_race'
+        'month_sin', 'month_cos', 'weekday', 'is_weekend_race',
+        # Nya features (Fas 25)
+        'horse_age', 'is_gelding', 'is_mare', 'record_time_norm',
+        'shoe_change_signal', 'career_earnings_log'
     ]
     
     records = []
