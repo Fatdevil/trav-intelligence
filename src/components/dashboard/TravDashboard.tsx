@@ -8,6 +8,7 @@ interface Horse {
   kmTime: string; driverForm?: string; classChange?: number;
   modelProb: number; marketProb: number; odds: number;
   scratch: boolean; edge?: number; ev?: number;
+  aiScore?: number | null; tier?: string | null;
 }
 
 interface Race {
@@ -359,8 +360,8 @@ export default function TravDashboard() {
               <span></span><span></span>
               <span>Häst / Kusk</span>
               <span style={{ textAlign: "center" }}>KM-TID</span>
-              <span style={{ textAlign: "center" }}>KUSK 30D</span>
-              <span style={{ textAlign: "center" }}>KLASS</span>
+              <span style={{ textAlign: "center" }}>AI SCORE</span>
+              <span style={{ textAlign: "center" }}>SIGNAL</span>
               <span style={{ textAlign: "center" }}>MODELL</span>
               <span style={{ textAlign: "right" }}>ODDS</span>
             </div>
@@ -418,22 +419,45 @@ export default function TravDashboard() {
                     <div style={{ fontSize: "12px", color: "#9A9AAA", fontWeight: 500 }}>{h.kmTime}</div>
                   </div>
 
-                  {/* Driver form */}
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{
-                      fontSize: "12px", fontWeight: 500,
-                      color: parseFloat(h.driverForm || '0') >= 30 ? "#D4A843" : "#6B6B7A"
-                    }}>{h.driverForm || '—'}</div>
+                  {/* AI Score circle */}
+                  <div style={{ textAlign: "center", display: "flex", justifyContent: "center" }}>
+                    {h.aiScore ? (
+                      <div style={{
+                        width: "36px", height: "36px", borderRadius: "50%",
+                        background: h.aiScore >= 80 ? "linear-gradient(135deg, #1a5c2e, #2d8a4e)" 
+                          : h.aiScore >= 60 ? "linear-gradient(135deg, #5c4a1a, #8a6d2d)" 
+                          : "linear-gradient(135deg, #2a2a35, #3a3a45)",
+                        border: h.aiScore >= 80 ? "1.5px solid #3ddc84" 
+                          : h.aiScore >= 60 ? "1.5px solid #D4A843" 
+                          : "1px solid #3a3a45",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "11px", fontWeight: 700,
+                        color: h.aiScore >= 80 ? "#3ddc84" : h.aiScore >= 60 ? "#D4A843" : "#6B6B7A",
+                        boxShadow: h.aiScore >= 80 ? "0 0 8px rgba(61,220,132,0.3)" : "none"
+                      }}>{h.aiScore}</div>
+                    ) : (
+                      <div style={{ fontSize: "11px", color: "#4A4A5A" }}>—</div>
+                    )}
                   </div>
 
-                  {/* Class change */}
+                  {/* Tier / Signal */}
                   <div style={{ textAlign: "center" }}>
-                    <div style={{
-                      fontSize: "12px", fontWeight: 500,
-                      color: (h.classChange || 0) > 0 ? "#5B9E6A" : (h.classChange || 0) < 0 ? "#9E5B5B" : "#5C5C6A"
-                    }}>
-                      {(h.classChange || 0) > 0 ? `+${h.classChange}` : (h.classChange || 0) === 0 ? "—" : h.classChange}
-                    </div>
+                    {h.tier === 'GULDTIPS' ? (
+                      <span style={{
+                        fontSize: "9px", fontWeight: 700, letterSpacing: "0.06em",
+                        background: "linear-gradient(135deg, #D4A843, #B8922E)",
+                        color: "#0D0D12", padding: "3px 8px", borderRadius: "10px",
+                      }}>GULDTIPS</span>
+                    ) : h.tier === 'BEVAKNING' ? (
+                      <span style={{
+                        fontSize: "9px", fontWeight: 600, letterSpacing: "0.06em",
+                        background: "rgba(212,168,67,0.12)",
+                        color: "#D4A843", padding: "3px 7px", borderRadius: "10px",
+                        border: "1px solid rgba(212,168,67,0.25)"
+                      }}>BEVAKNING</span>
+                    ) : (
+                      <div style={{ fontSize: "11px", color: "#4A4A5A" }}>—</div>
+                    )}
                   </div>
 
                   {/* Model prob */}

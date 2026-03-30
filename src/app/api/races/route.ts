@@ -39,18 +39,23 @@ export async function GET() {
       ORDER BY race_number ASC
     `, `${latestDate}%`);
 
-    // Hämta hästar per lopp
+    // Hämta hästar per lopp + AI-predictions
     const formatted = await Promise.all(races.map(async (race: any) => {
       const starters: any[] = await prisma.$queryRawUnsafe(`
         SELECT rs.id AS starter_id, rs.post_position, rs.driver_name, rs.trainer_name,
                rs.km_time, rs.odds_final, rs.odds_pre_race, rs.final_position, rs.scratch,
-               h.horse_name as horse_name
+               h.horse_name as horse_name,
+               vb.model_prob, vb.edge, vb.expected_value, vb.tier
         FROM race_starters rs
         JOIN horses h ON rs.horse_id = h.id
+        LEFT JOIN value_bets vb ON vb.starter_id = rs.id
         WHERE rs.race_id = $1 AND rs.scratch = false
         ORDER BY rs.post_position ASC
       `, race.id);
 
+      // Beräkna AI Score (0-100 per lopp, normaliserat)
+      const maxProb = Math.max(...starters.map((s: any) => s.model_prob || 0), 0.01);
+      
       return {
         id: race.id,
         num: race.race_number,
@@ -69,6 +74,12 @@ export async function GET() {
           scratch: !!s.scratch,
           finalPosition: s.final_position,
           starterId: s.starter_id,
+          // AI Predictions
+          aiScore: s.model_prob ? Math.round((s.model_prob / maxProb) * 100) : null,
+          modelProb: s.model_prob ? Number((s.model_prob * 100).toFixed(1)) : null,
+          edge: s.edge ? Number((s.edge * 100).toFixed(1)) : null,
+          ev: s.expected_value ? Number(s.expected_value.toFixed(2)) : null,
+          tier: s.tier || null,
         })),
       };
     }));

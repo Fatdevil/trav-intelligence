@@ -254,27 +254,67 @@ def compute_features():
         conn.execute(text("DELETE FROM features"))
     
     if IS_POSTGRES:
-        # Direkt psycopg2 för snabb batch-insert
+        # Direkt psycopg2 för snabb batch-insert med reconnect
         import psycopg2
         from psycopg2.extras import execute_batch
-        pg_conn = psycopg2.connect(DB_URL_SQLALCHEMY.replace("postgresql+psycopg2://", "postgresql://"))
-        cur = pg_conn.cursor()
+        import time
+        
+        db_url = DB_URL_SQLALCHEMY.replace("postgresql+psycopg2://", "postgresql://")
         
         sql = """INSERT INTO features 
             (id, race_id, starter_id, feature_name, feature_value, computed_at, look_ahead_cutoff_date)
             VALUES (%(id)s, %(race_id)s, %(starter_id)s, %(feature_name)s, %(feature_value)s, %(computed_at)s, %(look_ahead_cutoff_date)s)
             ON CONFLICT DO NOTHING"""
         
-        BATCH_SIZE = 5000
+        BATCH_SIZE = 2000
+        RECONNECT_EVERY = 10  # Reconnect every 10 batches
         total = len(records_to_insert)
-        for i in range(0, total, BATCH_SIZE):
-            batch = records_to_insert[i:i+BATCH_SIZE]
-            execute_batch(cur, sql, batch)
-            pg_conn.commit()
-            print(f"  [BATCH] {min(i+BATCH_SIZE, total)}/{total} rader insatta")
+        batch_count = 0
+        pg_conn = None
+        cur = None
         
-        cur.close()
-        pg_conn.close()
+        for i in range(0, total, BATCH_SIZE):
+            # Reconnect periodically to avoid Neon timeout
+            if batch_count % RECONNECT_EVERY == 0:
+                if pg_conn:
+                    try:
+                        cur.close()
+                        pg_conn.close()
+                    except:
+                        pass
+                pg_conn = psycopg2.connect(db_url)
+                cur = pg_conn.cursor()
+            
+            batch = records_to_insert[i:i+BATCH_SIZE]
+            
+            try:
+                execute_batch(cur, sql, batch)
+                pg_conn.commit()
+            except Exception as e:
+                print(f"  [RETRY] Batch {i} failed: {e}")
+                try:
+                    pg_conn.close()
+                except:
+                    pass
+                time.sleep(2)
+                pg_conn = psycopg2.connect(db_url)
+                cur = pg_conn.cursor()
+                try:
+                    execute_batch(cur, sql, batch)
+                    pg_conn.commit()
+                except Exception as e2:
+                    print(f"  [SKIP] Batch {i} skipped: {e2}")
+            
+            batch_count += 1
+            if batch_count % 5 == 0:
+                print(f"  [BATCH] {min(i+BATCH_SIZE, total)}/{total} rader insatta")
+        
+        if pg_conn:
+            try:
+                cur.close()
+                pg_conn.close()
+            except:
+                pass
     else:
         # SQLite: original SQLAlchemy approach
         sql_feature = text("""
