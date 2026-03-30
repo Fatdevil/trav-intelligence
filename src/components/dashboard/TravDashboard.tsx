@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import RaceChat from "./RaceChat";
 import HorseRow from "./HorseRow";
 import RowGenerator from "./RowGenerator";
+import DateNav from "./DateNav";
 import { useAutoIngest } from "@/hooks/useAutoIngest";
 import "./dashboard.css";
 
@@ -32,11 +33,14 @@ export default function TravDashboard() {
   const [raceComments, setRaceComments] = useState<any[]>([]);
   const [expandedBet, setExpandedBet] = useState<number | null>(null);
   const [eventInfo, setEventInfo] = useState<{track: string, type: string, date: string}>({track: '', type: '', date: ''});
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const { status: ingestStatus, message: ingestMsg, formattedTime, isPolling, manualIngest, togglePolling } = useAutoIngest();
 
-  // Hämta lopp
+  // Hämta lopp (re-fetch when selectedDate changes)
   useEffect(() => {
-    fetch('/api/races')
+    setLoading(true);
+    const url = selectedDate ? `/api/races?date=${selectedDate}` : '/api/races';
+    fetch(url)
       .then(res => res.json())
       .then(data => {
         if (data.races && data.races.length > 0) {
@@ -64,7 +68,7 @@ export default function TravDashboard() {
       .then(data => { if (data.comments) setRaceComments(data.comments); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [selectedDate]);
 
   useEffect(() => {
     if (!activeRace?.id) return;
@@ -123,10 +127,10 @@ export default function TravDashboard() {
             <div className="eventBadge">
               <span className="eventType">{eventInfo.type}</span>
               <span style={{ color: '#8A8A9A', fontSize: '12px' }}>{eventInfo.track}</span>
-              <span style={{ color: '#5C5C6C', fontSize: '11px' }}>·</span>
-              <span style={{ color: 'var(--text-dim)', fontSize: '11px', textTransform: 'capitalize' }}>{eventInfo.date}</span>
             </div>
           )}
+          
+          <DateNav selectedDate={selectedDate} onDateChange={(d) => setSelectedDate(d)} />
           
           <div style={{ display: "flex", gap: "4px" }}>
             {(["lopp", "edge", "rad", "chef"] as const).map(v => (

@@ -3,33 +3,41 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// GET /api/races — Hämtar senaste loppdagens alla lopp med startfält (v2 - PostgreSQL)
-export async function GET() {
+// GET /api/races — Hämtar loppdagens alla lopp med startfält
+export async function GET(request: Request) {
   try {
-    // Hitta kommande lopp (framtida datum), annars senaste historiska
+    const { searchParams } = new URL(request.url);
+    const requestedDate = searchParams.get('date');
+    
     const today = new Date().toISOString().split('T')[0];
-    
-    let targetRow: any[] = await prisma.$queryRawUnsafe(
-      `SELECT race_date FROM races WHERE CAST(race_date AS TEXT) >= $1 ORDER BY race_date ASC LIMIT 1`,
-      today
-    );
-    
+    let latestDate: string;
     let isUpcoming = true;
     
-    if (targetRow.length === 0) {
-      // Inga kommande → visa senaste historiska
-      targetRow = await prisma.$queryRawUnsafe(
-        'SELECT race_date FROM races ORDER BY race_date DESC LIMIT 1'
+    if (requestedDate) {
+      // Specifikt datum begärt
+      latestDate = requestedDate;
+      isUpcoming = requestedDate >= today;
+    } else {
+      // Hitta kommande lopp (framtida datum), annars senaste historiska
+      let targetRow: any[] = await prisma.$queryRawUnsafe(
+        `SELECT race_date FROM races WHERE CAST(race_date AS TEXT) >= $1 ORDER BY race_date ASC LIMIT 1`,
+        today
       );
-      isUpcoming = false;
+      
+      if (targetRow.length === 0) {
+        targetRow = await prisma.$queryRawUnsafe(
+          'SELECT race_date FROM races ORDER BY race_date DESC LIMIT 1'
+        );
+        isUpcoming = false;
+      }
+      
+      if (targetRow.length === 0) {
+        return NextResponse.json({ races: [], message: 'Inga lopp i databasen.' });
+      }
+      
+      const d = new Date(targetRow[0].race_date);
+      latestDate = d.toISOString().split('T')[0];
     }
-    
-    if (targetRow.length === 0) {
-      return NextResponse.json({ races: [], message: 'Inga lopp i databasen.' });
-    }
-
-    const d = new Date(targetRow[0].race_date);
-    const latestDate = d.toISOString().split('T')[0];
 
     // Hämta alla lopp från den dagen
     const races: any[] = await prisma.$queryRawUnsafe(`
