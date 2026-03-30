@@ -26,6 +26,7 @@ export default function TravDashboard() {
   const [vbCounts, setVbCounts] = useState<{guld: number, bev: number}>({guld: 0, bev: 0});
   const [raceComments, setRaceComments] = useState<any[]>([]);
   const [expandedBet, setExpandedBet] = useState<number | null>(null);
+  const [eventInfo, setEventInfo] = useState<{track: string, type: string, date: string}>({track: '', type: '', date: ''});
   const { status: ingestStatus, message: ingestMsg, formattedTime, isPolling, manualIngest, togglePolling } = useAutoIngest();
 
   // Hämta lopp från databasen
@@ -34,6 +35,12 @@ export default function TravDashboard() {
       .then(res => res.json())
       .then(data => {
         if (data.races && data.races.length > 0) {
+          // Spara event-info
+          if (data.trackName || data.raceType || data.raceDate) {
+            const d = data.raceDate ? new Date(data.raceDate + 'T00:00:00') : null;
+            const formatted = d ? d.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '';
+            setEventInfo({ track: data.trackName || '', type: data.raceType || '', date: formatted });
+          }
           // Berika hästar med edge-beräkning
           const enriched = data.races.map((r: any) => ({
             ...r,
@@ -170,6 +177,22 @@ export default function TravDashboard() {
           }}>
             Trav Edge
           </div>
+          {eventInfo.type && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{
+                background: 'rgba(212,168,67,0.15)',
+                color: '#D4A843',
+                padding: '2px 8px',
+                borderRadius: '3px',
+                fontSize: '11px',
+                fontWeight: 600,
+                letterSpacing: '0.05em',
+              }}>{eventInfo.type}</span>
+              <span style={{ color: '#8A8A9A', fontSize: '12px' }}>{eventInfo.track}</span>
+              <span style={{ color: '#5C5C6C', fontSize: '11px' }}>·</span>
+              <span style={{ color: '#6B6B7A', fontSize: '11px', textTransform: 'capitalize' }}>{eventInfo.date}</span>
+            </div>
+          )}
           <div style={{ display: "flex", gap: "4px" }}>
             {["lopp", "edge", "chef"].map(v => (
               <button key={v} className="nav-btn" onClick={() => setView(v)} style={{

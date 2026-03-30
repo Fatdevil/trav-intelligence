@@ -19,7 +19,7 @@ export async function GET() {
 
     // Hämta alla lopp från den dagen
     const races: any[] = await prisma.$queryRawUnsafe(`
-      SELECT id, race_number, track_name, distance, start_type, prize_money, num_starters, race_date
+      SELECT id, race_number, track_name, distance, start_type, prize_money, num_starters, race_date, race_type
       FROM races
       WHERE CAST(race_date AS TEXT) LIKE $1
       ORDER BY race_number ASC
@@ -62,6 +62,8 @@ export async function GET() {
     return NextResponse.json({
       races: formatted,
       raceDate: latestDate,
+      trackName: races[0]?.track_name || '',
+      raceType: races[0]?.race_type || '',
       count: formatted.length,
     });
   } catch (error: any) {
