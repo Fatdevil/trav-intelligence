@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// GET /api/races — Hämtar senaste loppdagens alla lopp med startfält
+// GET /api/races — Hämtar senaste loppdagens alla lopp med startfält (v2 - PostgreSQL)
 export async function GET() {
   try {
     // Hitta senaste loppdatumet
