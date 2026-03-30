@@ -30,7 +30,7 @@ export async function GET() {
       const starters: any[] = await prisma.$queryRawUnsafe(`
         SELECT rs.id AS starter_id, rs.post_position, rs.driver_name, rs.trainer_name,
                rs.km_time, rs.odds_final, rs.odds_pre_race, rs.final_position, rs.scratch,
-               h.name as horse_name
+               h.horse_name as horse_name
         FROM race_starters rs
         JOIN horses h ON rs.horse_id = h.id
         WHERE rs.race_id = $1 AND rs.scratch = false

@@ -20,7 +20,7 @@ export async function GET(request: Request) {
       // === MODE 1: Alla hästar i ett specifikt lopp ===
       const starters: any[] = await prisma.$queryRawUnsafe(`
         SELECT rs.id, rs.post_position, rs.odds_final,
-               h.name as horse_name,
+               h.horse_name as horse_name,
                rs.driver_name,
                r.race_date, r.track_name, r.race_number
         FROM race_starters rs
