@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import RaceChat from "./RaceChat";
 import HorseRow from "./HorseRow";
+import RowGenerator from "./RowGenerator";
 import { useAutoIngest } from "@/hooks/useAutoIngest";
 import "./dashboard.css";
 
@@ -128,9 +129,9 @@ export default function TravDashboard() {
           )}
           
           <div style={{ display: "flex", gap: "4px" }}>
-            {(["lopp", "edge", "chef"] as const).map(v => (
+            {(["lopp", "edge", "rad", "chef"] as const).map(v => (
               <button key={v} className={`navBtn ${view === v ? 'navBtnActive' : ''}`} onClick={() => setView(v)}>
-                {v === "lopp" ? "Lopp-Matris" : v === "edge" ? "Edge-Signaler" : "Opus-Syntes"}
+                {v === "lopp" ? "Lopp-Matris" : v === "edge" ? "Edge-Signaler" : v === "rad" ? "Radgenerator" : "Opus-Syntes"}
               </button>
             ))}
           </div>
@@ -380,6 +381,8 @@ export default function TravDashboard() {
           )}
         </div>
       )}
+
+      {view === "rad" && <RowGenerator />}
 
       {/* ═══ CHEF VIEW ═══ */}
       {view === "chef" && (
