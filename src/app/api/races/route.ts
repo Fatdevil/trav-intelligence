@@ -6,15 +6,29 @@ const prisma = new PrismaClient();
 // GET /api/races — Hämtar senaste loppdagens alla lopp med startfält (v2 - PostgreSQL)
 export async function GET() {
   try {
-    // Hitta senaste loppdatumet
-    const latestRow: any[] = await prisma.$queryRawUnsafe(
-      'SELECT race_date FROM races ORDER BY race_date DESC LIMIT 1'
+    // Hitta kommande lopp (framtida datum), annars senaste historiska
+    const today = new Date().toISOString().split('T')[0];
+    
+    let targetRow: any[] = await prisma.$queryRawUnsafe(
+      `SELECT race_date FROM races WHERE CAST(race_date AS TEXT) >= $1 ORDER BY race_date ASC LIMIT 1`,
+      today
     );
-    if (latestRow.length === 0) {
+    
+    let isUpcoming = true;
+    
+    if (targetRow.length === 0) {
+      // Inga kommande → visa senaste historiska
+      targetRow = await prisma.$queryRawUnsafe(
+        'SELECT race_date FROM races ORDER BY race_date DESC LIMIT 1'
+      );
+      isUpcoming = false;
+    }
+    
+    if (targetRow.length === 0) {
       return NextResponse.json({ races: [], message: 'Inga lopp i databasen.' });
     }
 
-    const d = new Date(latestRow[0].race_date);
+    const d = new Date(targetRow[0].race_date);
     const latestDate = d.toISOString().split('T')[0];
 
     // Hämta alla lopp från den dagen
@@ -64,6 +78,7 @@ export async function GET() {
       raceDate: latestDate,
       trackName: races[0]?.track_name || '',
       raceType: races[0]?.race_type || '',
+      isUpcoming,
       count: formatted.length,
     });
   } catch (error: any) {
