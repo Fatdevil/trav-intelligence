@@ -54,110 +54,119 @@ def parse_and_ingest_game(game_id: str):
     horses_inserted = 0
     starters_inserted = 0
 
-    with engine.begin() as conn:
-        for race in data['races']:
-            if race.get('status') != 'results':
-                continue # Endast lopp som är avgjorda
+    for race in data['races']:
+        if race.get('status') != 'results':
+            continue # Endast lopp som är avgjorda
+        
+        # Per-race transaction — om en häst failar dör inte allt
+        try:
+            with engine.begin() as conn:
+                race_id = race.get('id')
+                race_date_str = race.get('date') or race.get('startTime')
+                if not race_date_str: continue
                 
-            race_id = race.get('id')
-            race_date_str = race.get('date') or race.get('startTime')
-            if not race_date_str: continue
-            
-            # Parse prize money format 'Pris: 60.000-30.000...'
-            prize_money = 0
-            for term in race.get('terms') or []:
-                if 'Pris:' in term or 'Prissumma:' in term:
-                    try:
-                        p_str = term.split(':')[1].strip().split('-')[0].replace('.', '').replace(' ', '')
-                        prize_money = int(p_str)
-                    except: pass
-            
-            # Formatera start type (Volte / Auto)
-            raw_start = str(race.get('startMethod') or '').lower()
-            start_type = 'A' if 'auto' in raw_start else 'V'
-            
-            # Race SQL
-            try:
+                # Parse prize money format 'Pris: 60.000-30.000...'
+                prize_money = 0
+                for term in race.get('terms') or []:
+                    if 'Pris:' in term or 'Prissumma:' in term:
+                        try:
+                            p_str = term.split(':')[1].strip().split('-')[0].replace('.', '').replace(' ', '')
+                            prize_money = int(p_str)
+                        except: pass
+                
+                # Formatera start type (Volte / Auto)
+                raw_start = str(race.get('startMethod') or '').lower()
+                start_type = 'A' if 'auto' in raw_start else 'V'
+                
+                # Race SQL
                 conflict_clause = "ON CONFLICT DO NOTHING" if "postgres" in DB_URL_SQLALCHEMY.lower() else ""
                 insert_clause = "INSERT OR IGNORE" if "sqlite" in DB_URL_SQLALCHEMY.lower() else "INSERT"
                 
-                sql_race = text(f"""
-                    {insert_clause} INTO races 
-                    (id, race_date, track_name, race_number, race_type, distance, start_type, surface, prize_money, num_starters, created_at)
-                    VALUES (:id, :rdate, :track, :num, :rtype, :dist, :start, :surf, :prize, :starters, :created)
-                    {conflict_clause}
-                """)
-                
-                res = conn.execute(sql_race, {
-                    "id": race_id,
-                    "rdate": race_date_str,
-                    "track": (race.get('track') or {}).get('name', 'Unknown'),
-                    "num": race.get('number', 0),
-                    "rtype": game_type,
-                    "dist": race.get('distance', 0),
-                    "start": start_type,
-                    "surf": (race.get('track') or {}).get('condition', 'Unknown'),
-                    "prize": prize_money,
-                    "starters": len(race.get('starts') or []),
-                    "created": datetime.datetime.now().isoformat()
-                })
-                races_inserted += res.rowcount
-            except Exception as e:
-                print(f"  [WARN] Race insert error: {e}")
-
-            # Hästar & Starters
-            for starter in race.get('starts', []):
-                horse = starter.get('horse', {})
-                horse_id = str(horse.get('id', uuid.uuid4()))
-                
                 try:
-                    sql_horse = text(f"""
-                        {insert_clause} INTO horses 
-                        (id, horse_name, birth_year, country, gender, record_time, career_earnings, created_at)
-                        VALUES (:id, :name, :byear, :ctr, :gend, :rt, :ce, :created)
+                    sql_race = text(f"""
+                        {insert_clause} INTO races 
+                        (id, race_date, track_name, race_number, race_type, distance, start_type, surface, prize_money, num_starters, created_at)
+                        VALUES (:id, :rdate, :track, :num, :rtype, :dist, :start, :surf, :prize, :starters, :created)
                         {conflict_clause}
                     """)
                     
-                    # Parse record time
-                    record = horse.get('record', {})
-                    record_time = None
-                    if isinstance(record, dict):
-                        rt = record.get('time', {})
-                        if isinstance(rt, dict):
-                            rm = rt.get('minutes', 0) or 0
-                            rs_val = rt.get('seconds', 0) or 0
-                            rt_val = rt.get('tenths', 0) or 0
-                            if rm > 0 or rs_val > 0:
-                                record_time = float(rm * 60 + rs_val + rt_val / 10.0)
-                    
-                    career_earnings = horse.get('money', None)
-                    if career_earnings and isinstance(career_earnings, (int, float)):
-                        career_earnings = float(career_earnings)
-                    else:
-                        career_earnings = None
-                    
-                    res_h = conn.execute(sql_horse, {
-                        "id": horse_id,
-                        "name": horse.get('name', 'Unknown'),
-                        "byear": horse.get('age', 0),
-                        "ctr": horse.get('nationality', 'Unknown'),
-                        "gend": horse.get('sex', 'Unknown'),
-                        "rt": record_time,
-                        "ce": career_earnings,
+                    res = conn.execute(sql_race, {
+                        "id": race_id,
+                        "rdate": race_date_str,
+                        "track": (race.get('track') or {}).get('name', 'Unknown'),
+                        "num": race.get('number', 0),
+                        "rtype": game_type,
+                        "dist": race.get('distance', 0),
+                        "start": start_type,
+                        "surf": (race.get('track') or {}).get('condition', 'Unknown'),
+                        "prize": prize_money,
+                        "starters": len(race.get('starts') or []),
                         "created": datetime.datetime.now().isoformat()
                     })
-                    horses_inserted += res_h.rowcount
-                    
-                    # Update existing horse with new fields if they were missing
-                    if res_h.rowcount == 0 and (record_time or career_earnings):
-                        conn.execute(text("""
-                            UPDATE horses 
-                            SET record_time = COALESCE(:rt, record_time),
-                                career_earnings = COALESCE(:ce, career_earnings)
-                            WHERE id = :id
-                        """), {"id": horse_id, "rt": record_time, "ce": career_earnings})
+                    races_inserted += res.rowcount
                 except Exception as e:
-                    print(f"  [WARN] Horse insert error: {e}")
+                    pass  # ON CONFLICT = ok
+
+                # Hästar & Starters
+                for starter in race.get('starts', []):
+                    horse = starter.get('horse', {})
+                    horse_id = str(horse.get('id', uuid.uuid4()))
+                    
+                    # Horse insert (safe)
+                    try:
+                        sql_horse = text(f"""
+                            {insert_clause} INTO horses 
+                            (id, horse_name, birth_year, country, gender, record_time, career_earnings, created_at)
+                            VALUES (:id, :name, :byear, :ctr, :gend, :rt, :ce, :created)
+                            {conflict_clause}
+                        """)
+                        
+                        # Parse record time
+                        record = horse.get('record', {})
+                        record_time = None
+                        if isinstance(record, dict):
+                            rt = record.get('time', {})
+                            if isinstance(rt, dict):
+                                rm = rt.get('minutes', 0) or 0
+                                rs_val = rt.get('seconds', 0) or 0
+                                rt_val = rt.get('tenths', 0) or 0
+                                if rm > 0 or rs_val > 0:
+                                    record_time = float(rm * 60 + rs_val + rt_val / 10.0)
+                        
+                        career_earnings = horse.get('money', None)
+                        if career_earnings and isinstance(career_earnings, (int, float)):
+                            career_earnings = float(career_earnings)
+                        else:
+                            career_earnings = None
+                        
+                        # birth_year fix: ATG sends 'age' not birth year
+                        birth_year = horse.get('age', 0)
+                        if isinstance(birth_year, int) and birth_year < 100:
+                            # Convert age to birth year
+                            birth_year = datetime.date.today().year - birth_year
+                        
+                        res_h = conn.execute(sql_horse, {
+                            "id": horse_id,
+                            "name": horse.get('name', 'Unknown'),
+                            "byear": birth_year,
+                            "ctr": horse.get('nationality', 'Unknown'),
+                            "gend": horse.get('sex', 'Unknown'),
+                            "rt": record_time,
+                            "ce": career_earnings,
+                            "created": datetime.datetime.now().isoformat()
+                        })
+                        horses_inserted += res_h.rowcount
+                        
+                        # Update existing horse with new fields if they were missing
+                        if res_h.rowcount == 0 and (record_time or career_earnings):
+                            conn.execute(text("""
+                                UPDATE horses 
+                                SET record_time = COALESCE(:rt, record_time),
+                                    career_earnings = COALESCE(:ce, career_earnings)
+                                WHERE id = :id
+                            """), {"id": horse_id, "rt": record_time, "ce": career_earnings})
+                    except Exception:
+                        pass  # Skip individual horse errors
 
                 # Result parsing
                 res_data = starter.get('result', {})
@@ -252,6 +261,10 @@ def parse_and_ingest_game(game_id: str):
                         """), {"sf": shoes_front, "sb": shoes_back, "sulky": sulky_type, "gal": galloped, "id": start_id})
                 except Exception:
                     pass
+
+        except Exception as e:
+            # Per-race error — skip and continue
+            pass
 
     return races_inserted, horses_inserted, starters_inserted
 
