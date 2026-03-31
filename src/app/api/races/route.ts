@@ -62,7 +62,8 @@ export async function GET(request: Request) {
       `, race.id);
 
       // Beräkna AI Score (0-100 per lopp, normaliserat)
-      const maxProb = Math.max(...starters.map((s: any) => s.model_prob || 0), 0.01);
+      const probValues = starters.map((s: any) => Number(s.model_prob) || 0);
+      const maxProb = Math.max(...probValues, 0.01);
       
       return {
         id: race.id,
@@ -72,23 +73,32 @@ export async function GET(request: Request) {
         raceDate: latestDate,
         prize: race.prize_money ? `${Math.round(race.prize_money).toLocaleString('sv-SE')} kr` : null,
         starters: race.num_starters,
-        horses: starters.map((s: any) => ({
-          post: s.post_position,
-          name: s.horse_name,
-          driver: s.driver_name,
-          trainer: s.trainer_name,
-          kmTime: s.km_time ? `1:${(s.km_time % 60).toFixed(1).replace('.', ',')}` : '—',
-          odds: s.odds_final || s.odds_pre_race || 0,
-          scratch: !!s.scratch,
-          finalPosition: s.final_position,
-          starterId: s.starter_id,
-          // AI Predictions
-          aiScore: s.model_prob ? Math.round((s.model_prob / maxProb) * 100) : null,
-          modelProb: s.model_prob ? Number((s.model_prob * 100).toFixed(1)) : null,
-          edge: s.edge ? Number((s.edge * 100).toFixed(1)) : null,
-          ev: s.expected_value ? Number(s.expected_value.toFixed(2)) : null,
-          tier: s.tier || null,
-        })),
+        horses: starters.map((s: any) => {
+          const mProb = Number(s.model_prob) || 0;
+          const odds = s.odds_final || s.odds_pre_race || 0;
+          const mktProb = odds > 1 ? (1 / odds) : 0;
+          // AI Score: modellprob → normaliserad 0-100, eller marknadsprob som fallback
+          const rawScore = mProb > 0 ? (mProb / maxProb) * 100 : (mktProb * 100);
+          
+          return {
+            post: s.post_position,
+            name: s.horse_name,
+            driver: s.driver_name,
+            trainer: s.trainer_name,
+            kmTime: s.km_time ? `1:${(s.km_time % 60).toFixed(1).replace('.', ',')}` : '—',
+            odds,
+            scratch: !!s.scratch,
+            finalPosition: s.final_position,
+            starterId: s.starter_id,
+            // AI Predictions
+            aiScore: Math.round(rawScore) || null,
+            modelProb: mProb > 0 ? Number((mProb * 100).toFixed(1)) : (mktProb > 0 ? Number((mktProb * 100).toFixed(1)) : 0),
+            marketProb: mktProb > 0 ? Number((mktProb * 100).toFixed(1)) : 0,
+            edge: s.edge ? Number((Number(s.edge) * 100).toFixed(1)) : null,
+            ev: s.expected_value ? Number(Number(s.expected_value).toFixed(2)) : null,
+            tier: s.tier || null,
+          };
+        }),
       };
     }));
 

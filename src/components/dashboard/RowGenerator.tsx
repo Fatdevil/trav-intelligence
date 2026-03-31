@@ -46,7 +46,7 @@ export default function RowGenerator() {
       const res = await fetch('/api/generate-rows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ budget, risk, unitCost: 2 }),
+        body: JSON.stringify({ budget, risk }),
       });
       const data = await res.json();
       if (data.error) {

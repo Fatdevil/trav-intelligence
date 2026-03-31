@@ -8,9 +8,15 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const budget = body.budget || 500;
-    const unitCost = body.unitCost || 2;
     const risk = body.risk || 'balanced';
     const gameType = body.gameType || null;
+
+    // ATG radpriser per speltyp
+    const atgPricing: Record<string, number> = {
+      'V64': 1.00, 'V65': 0.50, 'V75': 0.50,
+      'V86': 0.25, 'V85': 0.25, 'GS75': 0.50,
+    };
+    let unitCost = 1.00; // default
 
     // Risk config
     const riskConfig: Record<string, { max: number; spikThreshold: number }> = {
@@ -76,6 +82,10 @@ export async function POST(request: Request) {
       });
     });
 
+    // Bestäm radpris baserat på game type
+    const detectedGameType = gameType || horses[0]?.race_type || 'V64';
+    unitCost = atgPricing[detectedGameType] || 1.00;
+
     const raceNumbers = Object.keys(raceMap).map(Number).sort((a, b) => a - b);
 
     // Greedy optimization
@@ -111,7 +121,7 @@ export async function POST(request: Request) {
           const newRows = oldRows * (selections[rn].length + 1) / selections[rn].length;
           const extraCost = (newRows - oldRows) * unitCost;
 
-          if (totalCost() + extraCost > budget * 1.1) continue;
+          if (totalCost() + extraCost > budget) continue; // Strikt budget, ingen 10% marginal
 
           const gain = horse.modelProb / Math.max(extraCost, 0.01);
           if (gain > bestGain) {
