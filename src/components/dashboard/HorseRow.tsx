@@ -39,7 +39,8 @@ export default function HorseRow({ horse: h, onExpand }: HorseRowProps) {
     // Lazy-load history for form curves
     if (next && !history && h.starterId) {
       setLoadingHistory(true);
-      const horseId = h.starterId.split('_')[1]; // Extract horse_id from starter_id
+      const parts = h.starterId.split('_');
+      const horseId = parts[parts.length - 1]; // horse_id is LAST segment: 2025-12-20_18_5_775220 → 775220
       fetch(`/api/horses/${horseId}/history`)
         .then(r => r.json())
         .then(data => {
