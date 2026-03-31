@@ -189,7 +189,39 @@ def compute_features():
             (CASE WHEN COALESCE(b.shoe_change_front, false) OR COALESCE(b.shoe_change_back, false) THEN 1.0 ELSE 0.0 END) AS shoe_change_signal,
             
             -- 21. Karriärintjäning (log-transformerad)
-            LN(COALESCE(b.career_earnings, 1) + 1) AS career_earnings_log
+            LN(COALESCE(b.career_earnings, 1) + 1) AS career_earnings_log,
+
+            -- TIDS-VIKTADE FEATURES (Fas 30) — Skiljer "het nu" från "gammal form"
+            -- 22. Form senaste 90 dagar (vinstprocent bara inom 3 mån)
+            (SELECT CAST(SUM(CASE WHEN h.final_position = 1 THEN 1 ELSE 0 END) AS FLOAT) / NULLIF(COUNT(*), 0)
+             FROM Base h WHERE h.horse_id = b.horse_id AND h.race_date < b.race_date
+             AND DATE_DIFF('day', h.race_date, b.race_date) <= 90) AS form_last_90d,
+            
+            -- 23. Form senaste 365 dagar
+            (SELECT CAST(SUM(CASE WHEN h.final_position = 1 THEN 1 ELSE 0 END) AS FLOAT) / NULLIF(COUNT(*), 0)
+             FROM Base h WHERE h.horse_id = b.horse_id AND h.race_date < b.race_date
+             AND DATE_DIFF('day', h.race_date, b.race_date) <= 365) AS form_last_365d,
+            
+            -- 24. Recency-viktat placeringsscore (nyare lopp väger exponentiellt mer)
+            (SELECT SUM(
+                (CASE WHEN h.final_position <= 3 THEN 1.0 ELSE 0.0 END) 
+                * POWER(0.9, ROW_NUMBER() OVER (ORDER BY h.race_date DESC) - 1)
+             ) / NULLIF(SUM(POWER(0.9, ROW_NUMBER() OVER (ORDER BY h.race_date DESC) - 1)), 0)
+             FROM (SELECT final_position, race_date FROM Base h 
+                   WHERE h.horse_id = b.horse_id AND h.race_date < b.race_date AND h.final_position > 0
+                   ORDER BY h.race_date DESC LIMIT 10) h) AS recency_weighted_score,
+            
+            -- 25. Placeringstrend (slope: negativ = förbättring, positiv = försämring)
+            (SELECT (COUNT(*) * SUM(rn * pos) - SUM(rn) * SUM(pos)) / 
+                    NULLIF(COUNT(*) * SUM(rn * rn) - SUM(rn) * SUM(rn), 0)
+             FROM (SELECT final_position AS pos, ROW_NUMBER() OVER (ORDER BY race_date DESC) AS rn
+                   FROM Base h WHERE h.horse_id = b.horse_id AND h.race_date < b.race_date 
+                   AND h.final_position > 0 ORDER BY h.race_date DESC LIMIT 5) sub) AS position_trend,
+            
+            -- 26. Comeback-flagga (tillbaka efter 180+ dagars uppehåll)
+            (CASE WHEN (SELECT DATE_DIFF('day', MAX(h.race_date), b.race_date) 
+                        FROM Base h WHERE h.horse_id = b.horse_id AND h.race_date < b.race_date) > 180 
+             THEN 1.0 ELSE 0.0 END) AS comeback_flag
 
         FROM Base b
     )
