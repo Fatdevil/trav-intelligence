@@ -26,6 +26,11 @@ def run_tuning():
     df_long = pd.read_sql(query, conn)
     conn.close()
     
+    # Dedup: om features körts flera gånger, ta senaste värdet per starter+feature
+    df_long = df_long.sort_values('feature_name').drop_duplicates(
+        subset=['starter_id', 'feature_name'], keep='last'
+    )
+    
     df_wide = df_long.pivot(
         index=['race_id', 'starter_id', 'final_position', 'race_date'], 
         columns='feature_name', values='feature_value'
