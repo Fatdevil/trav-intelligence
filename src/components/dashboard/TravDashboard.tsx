@@ -386,7 +386,7 @@ export default function TravDashboard() {
         </div>
       )}
 
-      {view === "rad" && <RowGenerator />}
+      {view === "rad" && <RowGenerator gameType={eventInfo.type} />}
 
       {/* ═══ CHEF VIEW ═══ */}
       {view === "chef" && (

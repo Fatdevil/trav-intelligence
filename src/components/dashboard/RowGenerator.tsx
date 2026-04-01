@@ -13,6 +13,7 @@ interface RowHorse {
 
 interface RaceSelection {
   raceNumber: number;
+  localRaceNumber?: number;
   track: string;
   type: 'SPIK' | 'HALVGARD' | 'GARDERING';
   coverage: number;
@@ -32,7 +33,7 @@ interface RowResult {
   garderat: number;
 }
 
-export default function RowGenerator() {
+export default function RowGenerator({ gameType }: { gameType?: string }) {
   const [budget, setBudget] = useState(500);
   const [risk, setRisk] = useState<'conservative' | 'balanced' | 'aggressive'>('balanced');
   const [result, setResult] = useState<RowResult | null>(null);
@@ -46,7 +47,7 @@ export default function RowGenerator() {
       const res = await fetch('/api/generate-rows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ budget, risk }),
+        body: JSON.stringify({ budget, risk, gameType }),
       });
       const data = await res.json();
       if (data.error) {
@@ -198,7 +199,7 @@ export default function RowGenerator() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <span style={{ fontSize: "14px" }}>{typeIcon(race.type)}</span>
-                  <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>Lopp {race.raceNumber}</span>
+                  <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>Avd {race.raceNumber} {race.localRaceNumber && <span style={{fontSize: "11px", color: "var(--text-ghost)", fontWeight: 400}}>(Lopp {race.localRaceNumber})</span>}</span>
                   <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>({race.track})</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -256,7 +257,7 @@ export default function RowGenerator() {
             </div>
             <div style={{ fontSize: "13px", color: "var(--text-muted)", fontFamily: "var(--font-mono)", lineHeight: 1.8 }}>
               {result.selections.map(r =>
-                `L${r.raceNumber}: ${r.horses.map(h => h.post).join(', ')}`
+                `Avd ${r.raceNumber}: ${r.horses.map(h => h.post).join(', ')}`
               ).join('\n')}
             </div>
           </div>

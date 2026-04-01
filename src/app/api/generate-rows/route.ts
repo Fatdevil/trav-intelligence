@@ -48,6 +48,7 @@ export async function POST(request: Request) {
     // Get all horses with model_prob
     const horses: any[] = await prisma.$queryRawUnsafe(`
       SELECT 
+        r.id as race_id, r.race_date,
         r.race_number, r.track_name, r.race_type, r.distance,
         rs.post_position, rs.odds_final,
         h.horse_name,
@@ -59,19 +60,28 @@ export async function POST(request: Request) {
       LEFT JOIN value_bets vb ON vb.starter_id = rs.id
       WHERE rs.scratch = false AND ${dateFilter}
       ${gameType ? `AND r.race_type = '${gameType}'` : ''}
-      ORDER BY r.race_number, rs.post_position
+      ORDER BY r.race_date ASC, r.track_name ASC, rs.post_position ASC
     `);
 
     if (horses.length === 0) {
       return NextResponse.json({ error: 'Inga lopp hittade', rows: null });
     }
 
-    // Group by race
+    // Assign chronological leg numbers
+    const uniqueRaces: string[] = [];
+    horses.forEach(h => {
+      const rid = h.race_id;
+      if (!uniqueRaces.includes(rid)) {
+        uniqueRaces.push(rid);
+      }
+    });
+
+    // Group by leg
     const raceMap: Record<number, any[]> = {};
     horses.forEach(h => {
-      const rn = h.race_number;
-      if (!raceMap[rn]) raceMap[rn] = [];
-      raceMap[rn].push({
+      const legNum = uniqueRaces.indexOf(h.race_id) + 1; // 1 to N
+      if (!raceMap[legNum]) raceMap[legNum] = [];
+      raceMap[legNum].push({
         post: h.post_position,
         name: h.horse_name,
         driver: h.driver_name,
@@ -79,6 +89,7 @@ export async function POST(request: Request) {
         odds: h.odds_final || 100,
         modelProb: Number(h.model_prob) || 0.01,
         edge: Number(h.edge) || 0,
+        localRaceNum: h.race_number,
       });
     });
 
@@ -145,6 +156,7 @@ export async function POST(request: Request) {
       
       return {
         raceNumber: rn,
+        localRaceNumber: allHorses[0]?.localRaceNum || rn,
         track: allHorses[0]?.track || '',
         type: posts.length === 1 ? 'SPIK' : posts.length <= 2 ? 'HALVGARD' : 'GARDERING',
         coverage: Math.round(coverage * 100),
