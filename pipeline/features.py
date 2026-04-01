@@ -202,14 +202,15 @@ def compute_features():
              FROM Base h WHERE h.horse_id = b.horse_id AND h.race_date < b.race_date
              AND DATE_DIFF('day', h.race_date, b.race_date) <= 365) AS form_last_365d,
             
-            -- 24. Recency-viktat placeringsscore (nyare lopp väger exponentiellt mer)
-            (SELECT SUM(
-                (CASE WHEN h.final_position <= 3 THEN 1.0 ELSE 0.0 END) 
-                * POWER(0.9, ROW_NUMBER() OVER (ORDER BY h.race_date DESC) - 1)
-             ) / NULLIF(SUM(POWER(0.9, ROW_NUMBER() OVER (ORDER BY h.race_date DESC) - 1)), 0)
-             FROM (SELECT final_position, race_date FROM Base h 
-                   WHERE h.horse_id = b.horse_id AND h.race_date < b.race_date AND h.final_position > 0
-                   ORDER BY h.race_date DESC LIMIT 10) h) AS recency_weighted_score,
+            -- 24. Recency-viktat placeringsscore (nyare = bättre, 0.9^rn decay)
+            (SELECT SUM(CASE WHEN pos <= 3 THEN 1.0 ELSE 0.0 END * POWER(0.9, rn - 1))
+                  / NULLIF(SUM(POWER(0.9, rn - 1)), 0)
+             FROM (SELECT final_position AS pos,
+                          ROW_NUMBER() OVER (ORDER BY race_date DESC) AS rn
+                   FROM Base h2
+                   WHERE h2.horse_id = b.horse_id AND h2.race_date < b.race_date
+                     AND h2.final_position > 0
+                   ORDER BY h2.race_date DESC LIMIT 10) sub) AS recency_weighted_score,
             
             -- 25. Placeringstrend (slope: negativ = förbättring, positiv = försämring)
             (SELECT (COUNT(*) * SUM(rn * pos) - SUM(rn) * SUM(pos)) / 
@@ -257,7 +258,10 @@ def compute_features():
         'month_sin', 'month_cos', 'weekday', 'is_weekend_race',
         # Nya features (Fas 25)
         'horse_age', 'is_gelding', 'is_mare', 'record_time_norm',
-        'shoe_change_signal', 'career_earnings_log'
+        'shoe_change_signal', 'career_earnings_log',
+        # Tids-viktade features (Fas 30)
+        'form_last_90d', 'form_last_365d', 'recency_weighted_score',
+        'position_trend', 'comeback_flag',
     ]
     
     records_to_insert = []
