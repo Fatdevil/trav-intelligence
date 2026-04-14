@@ -5,7 +5,7 @@ import HorseRow from "./HorseRow";
 import RowGenerator from "./RowGenerator";
 import DateNav from "./DateNav";
 import { useAutoIngest } from "@/hooks/useAutoIngest";
-import { useCompletion } from 'ai/react';
+import { useCompletion } from '@ai-sdk/react';
 import ReactMarkdown from 'react-markdown';
 import "./dashboard.css";
 
