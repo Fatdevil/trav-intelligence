@@ -333,42 +333,31 @@ def score_and_save(df, race_ids):
         print("[WARN] Inga starters att scorea.")
         return
     
-    # Ladda modell
+    # 5. Load model bundle (V2 Moonshot)
     models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../models')
-    calibrator = joblib.load(os.path.join(models_dir, 'calibrator_v1.pkl'))
-    
-    # Feature-kolumner (samma som features.py)
-    feature_cols = [
-        'post_position', 'field_size', 'log_odds',
-        'avg_km_time_last5', 'best_km_time_last10', 'days_since_last_race', 
-        'starts_last_90_days', 'win_rate_last10', 'top3_rate_last10',
-        'driver_win_rate_last30', 'driver_starts_last30', 'track_starts', 
-        'track_win_rate', 'distance_starts',
-        'class_change', 'days_since_last_win', 'avg_field_size_last5',
-        'trainer_win_rate_last30', 'volt_start_indicator', 'distance_delta',
-        'driver_horse_combo_winrate', 'avg_prize_last3', 'rest_optimal',
-        'km_time_consistency', 'avg_position_last3',
-        'driver_track_distance_winrate', 'trainer_change_flag',
-        'comeback_signal', 'overperformance_flag',
-        'barefoot_front', 'barefoot_score', 'gallop_rate_last5', 'sulky_american',
-        'month_sin', 'month_cos', 'weekday', 'is_weekend_race',
-        # Nya features (Fas 25)
-        'horse_age', 'is_gelding', 'is_mare', 'record_time_norm',
-        'shoe_change_signal', 'career_earnings_log'
-    ]
+    bundle_path = os.path.join(models_dir, 'calibrator_v2_moonshot.pkl')
+    try:
+        calibrator_bundle = joblib.load(bundle_path)
+        calibrator = calibrator_bundle['calibrator']
+        gbm = calibrator_bundle['gbm']
+        feature_cols = calibrator_bundle['features']
+    except Exception as e:
+        print(f"[ERROR] Kunde inte ladda modellen: {e}")
+        return
     
     # Log-odds
     safe_odds = df['odds'].apply(lambda o: max(o, 1.01) if pd.notnull(o) else np.nan)
     df['log_odds'] = np.log(safe_odds)
     
-    # Fyll saknade feature-kolumner med NaN
+    # Fyll saknade feature-kolumner med 0
     for col in feature_cols:
         if col not in df.columns:
-            df[col] = np.nan
-    
+            df[col] = 0
+            
     # Prediktera
     X = df[feature_cols].copy()
-    df['model_prob'] = calibrator.predict_proba(X)[:, 1]
+    raw_preds = gbm.predict(X, num_iteration=gbm.best_iteration)
+    df['model_prob'] = calibrator.predict(raw_preds)
     
     # Odds → market probability
     df['decimal_odds'] = df['odds'].apply(lambda o: max(o, 1.01) if pd.notnull(o) else np.nan)

@@ -75,10 +75,12 @@ def compute_features():
             b.horse_id,
             b.race_date,
             
-            -- Statiska features för det aktuella loppet
+            -- Statiska features och Grund-Metadata för det aktuella loppet
             b.post_position,
             b.field_size,
             b.odds,
+            b.final_position,
+            b.distance,
 
             -- Häst-Historik: KM-tider och Starter
             (SELECT AVG(km_time) FROM (SELECT km_time FROM Base h WHERE h.horse_id = b.horse_id AND h.race_date < b.race_date AND h.km_time > 0 ORDER BY h.race_date DESC LIMIT 5)) AS avg_km_time_last5,
@@ -256,132 +258,12 @@ def compute_features():
     safe_odds = df['odds'].apply(lambda o: max(o, 1.01) if pd.notnull(o) else np.nan) 
     df['log_odds'] = np.log(safe_odds)
 
-    # 4. Omvandla till Long Format (Key-Value) för Prisma-databasen
-    print("[FEATURES] Translating to Long-Format db insertion...")
-    feature_columns = [
-        'post_position', 'field_size', 'log_odds',
-        'avg_km_time_last5', 'best_km_time_last10', 'days_since_last_race', 
-        'starts_last_90_days', 'win_rate_last10', 'top3_rate_last10',
-        'driver_win_rate_last30', 'driver_starts_last30', 'track_starts', 
-        'track_win_rate', 'distance_starts',
-        'class_change', 'days_since_last_win', 'avg_field_size_last5',
-        'trainer_win_rate_last30', 'volt_start_indicator', 'distance_delta',
-        # Nya features (Fas 8)
-        'driver_horse_combo_winrate', 'avg_prize_last3', 'rest_optimal',
-        'km_time_consistency', 'avg_position_last3',
-        # Unika edge-features (Fas 9)
-        'driver_track_distance_winrate', 'trainer_change_flag',
-        'comeback_signal', 'overperformance_flag',
-        # Sko- och galoppdata (Fas 10)
-        'barefoot_front', 'barefoot_score', 'gallop_rate_last5', 'sulky_american',
-        # Sasongsfeatures (Fas 15)
-        'month_sin', 'month_cos', 'weekday', 'is_weekend_race',
-        # Nya features (Fas 25)
-        'horse_age', 'is_gelding', 'is_mare', 'record_time_norm',
-        'shoe_change_signal', 'career_earnings_log',
-        # Tids-viktade features (Fas 30)
-        'form_last_90d', 'form_last_365d', 'recency_weighted_score',
-        'position_trend', 'comeback_flag',
-    ]
+    # 4. Spara till lokal Parquet-fil för att träna LightGBM utanför Neon PostgreSQL-gränsen
+    print("[FEATURES] Sparar till features_v2.parquet...")
     
-    records_to_insert = []
-    timestamp_now = datetime.datetime.now().isoformat()
-    
-    for _, row in df.iterrows():
-        for feat in feature_columns:
-            feat_val = row[feat]
-            final_val = float(feat_val) if pd.notnull(feat_val) else None
-            
-            records_to_insert.append({
-                "id": str(uuid.uuid4()),
-                "race_id": row['race_id'],
-                "starter_id": row['starter_id'],
-                "feature_name": feat,
-                "feature_value": final_val,
-                "computed_at": timestamp_now,
-                "look_ahead_cutoff_date": row['race_date'].isoformat() if isinstance(row['race_date'], datetime.datetime) else str(row['race_date'])
-            })
-    
-    print(f"[FEATURES] Infogar {len(records_to_insert)} rader i features-tabellen...")
-    engine = create_engine(DB_URL_SQLALCHEMY)
-    
-    # Töm gamla features
-    with engine.begin() as conn:
-        conn.execute(text("DELETE FROM features"))
-    
-    if IS_POSTGRES:
-        # Direkt psycopg2 för snabb batch-insert med reconnect
-        import psycopg2
-        from psycopg2.extras import execute_batch
-        import time
-        
-        db_url = DB_URL_SQLALCHEMY.replace("postgresql+psycopg2://", "postgresql://")
-        
-        sql = """INSERT INTO features 
-            (id, race_id, starter_id, feature_name, feature_value, computed_at, look_ahead_cutoff_date)
-            VALUES (%(id)s, %(race_id)s, %(starter_id)s, %(feature_name)s, %(feature_value)s, %(computed_at)s, %(look_ahead_cutoff_date)s)
-            ON CONFLICT DO NOTHING"""
-        
-        BATCH_SIZE = 2000
-        RECONNECT_EVERY = 10  # Reconnect every 10 batches
-        total = len(records_to_insert)
-        batch_count = 0
-        pg_conn = None
-        cur = None
-        
-        for i in range(0, total, BATCH_SIZE):
-            # Reconnect periodically to avoid Neon timeout
-            if batch_count % RECONNECT_EVERY == 0:
-                if pg_conn:
-                    try:
-                        cur.close()
-                        pg_conn.close()
-                    except:
-                        pass
-                pg_conn = psycopg2.connect(db_url)
-                cur = pg_conn.cursor()
-            
-            batch = records_to_insert[i:i+BATCH_SIZE]
-            
-            try:
-                execute_batch(cur, sql, batch)
-                pg_conn.commit()
-            except Exception as e:
-                print(f"  [RETRY] Batch {i} failed: {e}")
-                try:
-                    pg_conn.close()
-                except:
-                    pass
-                time.sleep(2)
-                pg_conn = psycopg2.connect(db_url)
-                cur = pg_conn.cursor()
-                try:
-                    execute_batch(cur, sql, batch)
-                    pg_conn.commit()
-                except Exception as e2:
-                    print(f"  [SKIP] Batch {i} skipped: {e2}")
-            
-            batch_count += 1
-            if batch_count % 5 == 0:
-                print(f"  [BATCH] {min(i+BATCH_SIZE, total)}/{total} rader insatta")
-        
-        if pg_conn:
-            try:
-                cur.close()
-                pg_conn.close()
-            except:
-                pass
-    else:
-        # SQLite: original SQLAlchemy approach
-        sql_feature = text("""
-            INSERT OR IGNORE INTO features 
-            (id, race_id, starter_id, feature_name, feature_value, computed_at, look_ahead_cutoff_date)
-            VALUES (:id, :race_id, :starter_id, :feature_name, :feature_value, :computed_at, :look_ahead_cutoff_date)
-        """)
-        with engine.begin() as conn:
-            conn.execute(sql_feature, records_to_insert)
-
-    print("[DONE] FEATURIZATION COMPLETE!")
+    # Vi behöver pivota 'df' till Long-Format först? NEJ! Träningen kan ske DIREKT på Wide-format om vi sparar hela df
+    df.to_parquet('features_v2_moonshot.parquet')
+    print("[DONE] FEATURIZATION (PARQUET) COMPLETE!")
     
 if __name__ == "__main__":
     compute_features()
