@@ -5,6 +5,8 @@ import HorseRow from "./HorseRow";
 import RowGenerator from "./RowGenerator";
 import DateNav from "./DateNav";
 import { useAutoIngest } from "@/hooks/useAutoIngest";
+import { useCompletion } from 'ai/react';
+import ReactMarkdown from 'react-markdown';
 import "./dashboard.css";
 
 interface Horse {
@@ -36,6 +38,9 @@ export default function TravDashboard() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [bankroll, setBankroll] = useState<number>(1000);
   const { status: ingestStatus, message: ingestMsg, formattedTime, isPolling, manualIngest, togglePolling } = useAutoIngest();
+  const { completion, complete, isLoading: isChefLoading } = useCompletion({
+    api: '/api/system-analyst',
+  });
 
   // Hämta lopp (re-fetch when selectedDate changes)
   useEffect(() => {
@@ -428,56 +433,45 @@ export default function TravDashboard() {
 
       {view === "rad" && <RowGenerator gameType={eventInfo.type} />}
 
-      {/* ═══ CHEF VIEW ═══ */}
+      {/* ═══ CHEF VIEW (OPUS SYNDICATE BUILDER) ═══ */}
       {view === "chef" && (
-        <div style={{ padding: "24px 28px", maxWidth: "760px" }} className="fadeIn">
-          <div style={{ fontFamily: "var(--font-serif)", fontSize: "20px", color: "var(--text-primary)", marginBottom: "4px" }}>
-            Opus 4.6 · Kvantitativ Omgångssyntes
-          </div>
-          <div style={{ fontSize: "11px", color: "var(--text-ghost)", marginBottom: "28px", letterSpacing: "0.04em" }}>
-            LLM-driven sammanställning av LightGBM-matrisen
-          </div>
-
-          <div className="summaryCard">
-            <div style={{ fontSize: "10px", color: "var(--gold)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "12px" }}>
-              Identificerade Primära Edge-Zoner
-            </div>
-            {edgeBets.slice(0, 3).map((h, i) => (
-              <div key={i} className="slideIn" style={{
-                display: "flex", alignItems: "center", gap: "12px",
-                padding: "10px 0", borderBottom: i < 2 ? "1px solid #1A1A24" : "none",
-                animationDelay: `${i * 0.1}s`
-              }}>
-                <div style={{
-                  width: "28px", height: "28px",
-                  background: "var(--gold-bg)", border: "1px solid rgba(212,168,67,0.2)",
-                  borderRadius: "2px", display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "10px", color: "var(--gold)", fontWeight: 500
-                }}>L{h.raceNum}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-primary)" }}>{h.name}</div>
-                  <div style={{ fontSize: "11px", color: "var(--text-ghost)", marginTop: "2px" }}>
-                    {h.driver} · sp. {h.post} · odds {h.odds.toFixed(2)}
-                  </div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: "13px", color: "var(--gold)", fontWeight: 500 }}>+{h.edge}% differens</div>
-                  <div style={{ fontSize: "10px", color: "var(--text-ghost)", marginTop: "2px" }}>{h.modelProb}% vs {h.marketProb}%</div>
-                </div>
+        <div style={{ padding: "24px 28px", maxWidth: "800px", margin: "0 auto" }} className="fadeIn">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+            <div>
+              <div style={{ fontFamily: "var(--font-serif)", fontSize: "24px", color: "var(--gold)", marginBottom: "4px" }}>
+                The Chief Analyst
               </div>
-            ))}
+              <div style={{ fontSize: "12px", color: "var(--text-ghost)", letterSpacing: "0.04em" }}>
+                Kvantitativ Systembyggare driven av Claude 3.5 Sonnet & LightGBM
+              </div>
+            </div>
+            
+            <button
+              onClick={() => complete("", { body: { systemData: edgeBets, bankroll } })}
+              disabled={isChefLoading}
+              style={{
+                background: isChefLoading ? "rgba(212,168,67,0.2)" : "var(--gold-bg)",
+                border: "1px solid var(--gold)",
+                color: "var(--gold)",
+                padding: "8px 16px", borderRadius: "4px", fontSize: "13px", fontWeight: "bold",
+                cursor: isChefLoading ? "not-allowed" : "pointer"
+              }}
+            >
+              {isChefLoading ? "ANALYS PÅGÅR..." : "GENERERA SYSTEM"}
+            </button>
           </div>
 
-          <div style={{
-            marginTop: "16px", background: "#0D1A12", border: "1px solid #1A2A1A",
-            padding: "14px 18px", borderRadius: "4px",
-            display: "flex", alignItems: "center", gap: "12px"
-          }}>
-            <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#4CAF50", flexShrink: 0 }} />
-            <div style={{ fontSize: "11px", color: "#5C7A5C", lineHeight: "1.6" }}>
-              Rapport baserad exklusivt på pre-race LightGBM-matris med 43 features. Analytisk validering krävs.
+          {!completion && !isChefLoading && (
+            <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-ghost)", fontSize: "13px" }}>
+              Klicka på "Generera System" för att låta Opus-agenten skriva en systemram baserad på {edgeBets.length} identifierade value-bets.
             </div>
-          </div>
+          )}
+
+          {completion && (
+            <div className="summaryCard markdown-body" style={{ background: "rgba(10,10,15,0.8)", border: "1px solid #1A1A24", padding: "24px" }}>
+              <ReactMarkdown>{completion}</ReactMarkdown>
+            </div>
+          )}
         </div>
       )}
       
