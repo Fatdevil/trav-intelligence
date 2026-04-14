@@ -76,7 +76,7 @@ def train_model():
     # Save the moonshot model
     models_dir = os.path.join(pwd, '../models')
     os.makedirs(models_dir, exist_ok=True)
-    out_path = os.path.join(models_dir, 'calibrator_v2_moonshot.pkl')
+    out_path = os.path.join(models_dir, 'calibrator_v3_moonshot.pkl')
     
     from sklearn.calibration import IsotonicRegression
     print("[CALIBRATION] Calibrating probabilities with IsotonicRegression...")
@@ -90,7 +90,7 @@ def train_model():
         'features': feature_cols
     }
     joblib.dump(model_bundle, out_path)
-    print(f"[DONE] Moonshot model saved to {out_path}")
+    print(f"[DONE] Moonshot V3 model saved to {out_path}")
 
 if __name__ == '__main__':
     train_model()

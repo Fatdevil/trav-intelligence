@@ -333,9 +333,9 @@ def score_and_save(df, race_ids):
         print("[WARN] Inga starters att scorea.")
         return
     
-    # 5. Load model bundle (V2 Moonshot)
+    # 5. Load model bundle (V3 Moonshot med ELO)
     models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../models')
-    bundle_path = os.path.join(models_dir, 'calibrator_v2_moonshot.pkl')
+    bundle_path = os.path.join(models_dir, 'calibrator_v3_moonshot.pkl')
     try:
         calibrator_bundle = joblib.load(bundle_path)
         calibrator = calibrator_bundle['calibrator']
@@ -344,6 +344,21 @@ def score_and_save(df, race_ids):
     except Exception as e:
         print(f"[ERROR] Kunde inte ladda modellen: {e}")
         return
+        
+    # Ladda historisk ELO
+    elo_path = os.path.join(models_dir, 'elo_dict.pkl')
+    try:
+        elo_dict = joblib.load(elo_path)
+    except:
+        elo_dict = {}
+        
+    # Tillämpa ELO för varje häst (1500 om debutant/okänd)
+    df['current_elo'] = df['horse_id'].apply(lambda x: elo_dict.get(x, 1500.0))
+    
+    # Beräkna field avg diff per lopp
+    for race_id, group in df.groupby('race_id'):
+        field_avg = group['current_elo'].mean()
+        df.loc[group.index, 'elo_diff_from_field_avg'] = group['current_elo'] - field_avg
     
     # Log-odds
     safe_odds = df['odds'].apply(lambda o: max(o, 1.01) if pd.notnull(o) else np.nan)

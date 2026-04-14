@@ -253,6 +253,71 @@ def compute_features():
     
     print(f"[FEATURES] Skapade raa features for {len(df)} startande.")
     
+    print("[FEATURES] Beraknar Elo Rating (Chronological Loop)...")
+    # Sortera df strikt kronologiskt for den rekursiva ELO-motorn
+    df = df.sort_values(by=['race_date', 'race_id'])
+    
+    elo_dict = {}
+    K = 32.0 # Standard maximal aggresiv K-faktor for snabb anpassning
+    
+    # Initiera nya kolumner
+    df['current_elo'] = 1500.0
+    df['elo_diff_from_field_avg'] = 0.0
+    
+    # GroupBy bevarar ordningen nar DataFrame redans sorterats
+    for race_id, group in df.groupby('race_id', sort=False):
+        indices = group.index
+        horses = group['horse_id'].values
+        positions = group['final_position'].values
+        
+        # 1. Hamta pre-race ELO
+        current_elos = np.array([elo_dict.get(h, 1500.0) for h in horses])
+        df.loc[indices, 'current_elo'] = current_elos
+        
+        # 2. Berakna field avg diff (Sjuk margin edge!)
+        field_avg = np.mean(current_elos) if len(current_elos) > 0 else 1500.0
+        df.loc[indices, 'elo_diff_from_field_avg'] = current_elos - field_avg
+        
+        # 3. Kalkylera ny ELO (bara om loppet ar avgjort historiskt)
+        has_results = any((pd.notnull(p) and p > 0) for p in positions)
+        if has_results:
+            n = len(horses)
+            if n > 1:
+                new_elos = current_elos.copy()
+                for i in range(n):
+                    pos_i = positions[i]
+                    # Oplacerad, diskad, eller galopp fallbacks
+                    if pd.isnull(pos_i) or pos_i == 0: pos_i = 99
+                    
+                    for j in range(n):
+                        if i == j: continue
+                        pos_j = positions[j]
+                        if pd.isnull(pos_j) or pos_j == 0: pos_j = 99
+                        
+                        # Vinnar-Score calculation
+                        if pos_i < pos_j: S = 1.0
+                        elif pos_i > pos_j: S = 0.0
+                        else: S = 0.5
+                        
+                        # Expected ELO Score
+                        E = 1.0 / (1.0 + 10.0 ** ((current_elos[j] - current_elos[i]) / 400.0))
+                        
+                        # Justerad K for parvis mattning
+                        K_adj = K / (n - 1)
+                        new_elos[i] += K_adj * (S - E)
+                
+                # Skriv tillbaka uppdaterad ELO till minnet for nasta vecka
+                for i, h in enumerate(horses):
+                    elo_dict[h] = new_elos[i]
+
+    print("[FEATURES] ELO-Räkning Slutförd!")
+    
+    # Exporterar den sanna ELO-listan for morgondagens lopp
+    import joblib
+    models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../models')
+    os.makedirs(models_dir, exist_ok=True)
+    joblib.dump(elo_dict, os.path.join(models_dir, 'elo_dict.pkl'))
+
     # 3. Clean up. Vi behåller NaN så att SQL databasen får NULL-värden. LightGBM hanterar NULL nativt.
     # Log-odds calculation.
     safe_odds = df['odds'].apply(lambda o: max(o, 1.01) if pd.notnull(o) else np.nan) 
