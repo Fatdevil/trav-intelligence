@@ -34,6 +34,7 @@ export default function TravDashboard() {
   const [expandedBet, setExpandedBet] = useState<number | null>(null);
   const [eventInfo, setEventInfo] = useState<{track: string, type: string, date: string}>({track: '', type: '', date: ''});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [bankroll, setBankroll] = useState<number>(1000);
   const { status: ingestStatus, message: ingestMsg, formattedTime, isPolling, manualIngest, togglePolling } = useAutoIngest();
 
   // Hämta lopp (re-fetch when selectedDate changes)
@@ -253,6 +254,30 @@ export default function TravDashboard() {
             AI-modellens identifierade undervärderade hästar
           </div>
 
+          {/* Bankroll Management */}
+          <div style={{ 
+            background: "var(--bg-card)", border: "1px solid var(--border)", 
+            borderRadius: "6px", padding: "16px 20px", marginBottom: "20px" 
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+              <span style={{ fontSize: "10px", color: "var(--gold)", letterSpacing: "0.1em", textTransform: "uppercase" }}>💰 Bankroll Management (Kelly Criterion)</span>
+              <span style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)" }}>{bankroll.toLocaleString('sv-SE')} kr</span>
+            </div>
+            <input
+              type="range" min="100" max="50000" step="100" value={bankroll}
+              onChange={e => setBankroll(Number(e.target.value))}
+              style={{
+                width: "100%", height: "4px", appearance: "none", background: "var(--border)",
+                borderRadius: "2px", outline: "none", cursor: "pointer",
+                accentColor: "#4CAF50",
+              }}
+            />
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px" }}>
+              <span style={{ fontSize: "9px", color: "var(--text-ghost)" }}>Simulerad Spelkassa</span>
+              <span style={{ fontSize: "9px", color: "var(--text-muted)" }}>Justera för att se optimal insats via Kelly</span>
+            </div>
+          </div>
+
           {/* Tier summary */}
           <div style={{ display: "flex", gap: "12px", marginBottom: "20px" }}>
             <div style={{ background: "var(--gold-bg)", border: "1px solid rgba(212,168,67,0.3)", borderRadius: "4px", padding: "10px 16px", flex: 1 }}>
@@ -269,7 +294,7 @@ export default function TravDashboard() {
 
           {/* Edge bet headers */}
           <div style={{
-            display: "grid", gridTemplateColumns: "80px 30px 50px 1fr 80px 80px 70px 70px",
+            display: "grid", gridTemplateColumns: "80px 30px 40px 1fr 70px 70px 60px 60px 80px",
             gap: "0", padding: "6px 0", borderBottom: "1px solid var(--border)",
             fontSize: "10px", color: "var(--text-ghost)", letterSpacing: "0.08em", textTransform: "uppercase"
           }}>
@@ -278,6 +303,7 @@ export default function TravDashboard() {
             <span style={{ textAlign: "center" }}>MARKNAD</span>
             <span style={{ textAlign: "center" }}>EDGE</span>
             <span style={{ textAlign: "right" }}>ODDS</span>
+            <span style={{ textAlign: "right", color: "var(--green)" }}>INSATS</span>
           </div>
 
           {(raceComments.length > 0 ? raceComments : valueBets).map((item: any, i: number) => {
@@ -297,7 +323,7 @@ export default function TravDashboard() {
               <div key={i} className="slideIn" style={{ animationDelay: `${i * 0.05}s` }}
                 onClick={() => setExpandedBet(isExpanded ? null : i)}>
                 <div className="horseRow" style={{
-                  gridTemplateColumns: "80px 30px 50px 1fr 80px 80px 70px 70px",
+                  gridTemplateColumns: "80px 30px 40px 1fr 70px 70px 60px 60px 80px",
                   borderLeft: tier === 'GULDTIPS' ? "2px solid var(--gold)" : "2px solid #3A3A46",
                   paddingLeft: "8px",
                   background: tier === 'GULDTIPS' ? "rgba(212,168,67,0.04)" : "transparent",
@@ -349,6 +375,20 @@ export default function TravDashboard() {
                     }}>+{edgeVal}%</span>
                   </div>
                   <div style={{ textAlign: "right", fontSize: "13px", color: "var(--text-secondary)", fontWeight: 500 }}>{oddsVal}</div>
+                  <div style={{ textAlign: "right" }}>
+                    {vb.kelly && vb.kelly > 0 ? (
+                      <span style={{
+                        fontSize: "13px", fontWeight: 700,
+                        color: "var(--green)",
+                        background: "rgba(76,175,80,0.1)",
+                        padding: "2px 8px", borderRadius: "12px", border: "1px solid rgba(76,175,80,0.2)"
+                      }}>
+                        {Math.round(bankroll * vb.kelly)} kr
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: "12px", color: "var(--text-ghost)" }}>—</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Expanded */}
