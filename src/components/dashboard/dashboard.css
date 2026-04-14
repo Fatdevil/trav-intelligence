@@ -9,7 +9,7 @@
 :root {
   --bg-primary: #0F1117;
   --bg-card: #141420;
-  --bg-hover: rgba(255,255,255,0.03);
+  --bg-hover: rgba(255,255,255,0.06);
   --border: #1E1E2A;
   --border-soft: #181820;
   
@@ -272,6 +272,12 @@
   background: var(--bg-hover);
 }
 
+@media (max-width: 900px) {
+  .widescreen-connector {
+    display: none;
+  }
+}
+
 .horseRowEdge {
   border-left-color: var(--gold-dim);
   background: rgba(212,168,67,0.04);
@@ -438,6 +444,15 @@
 @keyframes slideIn {
   from { opacity: 0; transform: translateX(-8px); }
   to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes terminalPulse {
+  0%, 100% { opacity: 1; text-shadow: 0 0 8px rgba(212,168,67,0.3); }
+  50% { opacity: 0.3; text-shadow: none; }
+}
+
+.pulsing-text {
+  animation: terminalPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 .fadeIn {

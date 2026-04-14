@@ -74,16 +74,24 @@ export default function HorseRow({ horse: h, onExpand }: HorseRowProps) {
           )}
         </div>
 
-        {/* Name */}
-        <div style={{ paddingRight: "12px" }}>
-          <div style={{
-            fontSize: "13px", fontWeight: 500,
-            color: isGold ? "var(--text-primary)" : hasEdge ? "var(--text-primary)" : "var(--text-muted)",
-            textDecoration: h.scratch ? "line-through" : "none"
-          }}>{h.name}</div>
-          <div style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "2px" }}>
-            {h.driver} · {h.trainer}
+        {/* Name with Dotted Connector */}
+        <div style={{ display: 'flex', alignItems: 'center', paddingRight: "12px" }}>
+          <div style={{ flexShrink: 0 }}>
+            <div style={{
+              fontSize: "13px", fontWeight: 500,
+              color: isGold ? "var(--text-primary)" : hasEdge ? "var(--text-primary)" : "var(--text-muted)",
+              textDecoration: h.scratch ? "line-through" : "none"
+            }}>{h.name}</div>
+            <div style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "2px" }}>
+              {h.driver} · {h.trainer}
+            </div>
           </div>
+          <div className="widescreen-connector" style={{ 
+            flexGrow: 1, 
+            borderBottom: '1px dotted rgba(255,255,255,0.1)', 
+            margin: '0 12px 0 16px', 
+            opacity: 0.7 
+          }}></div>
         </div>
 
         {/* Km-tid */}

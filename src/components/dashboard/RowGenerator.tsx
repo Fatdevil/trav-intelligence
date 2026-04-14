@@ -120,7 +120,8 @@ export default function RowGenerator({ gameType }: { gameType?: string }) {
                 style={{
                   flex: 1, padding: "10px 12px", borderRadius: "4px",
                   background: risk === key ? "var(--gold-bg)" : "rgba(30,30,40,0.5)",
-                  border: risk === key ? "1px solid rgba(212,168,67,0.4)" : "1px solid var(--border)",
+                  border: risk === key ? "1px solid rgba(212,168,67,0.6)" : "1px solid var(--border)",
+                  boxShadow: risk === key ? "0 0 15px rgba(212,168,67,0.2)" : "none",
                   color: risk === key ? "var(--gold)" : "var(--text-dim)",
                   cursor: "pointer", fontFamily: "var(--font-mono)",
                   transition: "all var(--transition-fast)",
@@ -143,6 +144,7 @@ export default function RowGenerator({ gameType }: { gameType?: string }) {
             fontSize: "12px", fontWeight: 700, letterSpacing: "0.08em",
             textTransform: "uppercase", cursor: loading ? "wait" : "pointer",
             fontFamily: "var(--font-mono)",
+            boxShadow: loading ? "none" : "0 4px 15px rgba(212,168,67,0.25)",
             transition: "all var(--transition-fast)",
           }}>
           {loading ? '⟳ GENERERAR RAD...' : '🎯 GENERERA OPTIMERAD RAD'}

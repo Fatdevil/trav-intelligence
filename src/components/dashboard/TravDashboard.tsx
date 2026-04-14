@@ -371,12 +371,18 @@ export default function TravDashboard() {
                   </div>
                   <div style={{ textAlign: "center", fontSize: "13px", color: "var(--gold)", fontWeight: 500 }}>{modelPct}%</div>
                   <div style={{ textAlign: "center", fontSize: "13px", color: "var(--text-dim)" }}>{marketPct}%</div>
-                  <div style={{ textAlign: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div style={{ flexGrow: 1, background: "rgba(255,255,255,0.05)", height: "4px", borderRadius: "2px", overflow: "hidden", display: window.innerWidth < 600 ? "none" : "block" }}>
+                      <div style={{
+                        width: `${Math.min(100, Math.max(5, edgeVal * 3))}%`,
+                        height: "100%",
+                        background: tier === 'GULDTIPS' ? "linear-gradient(90deg, var(--gold-dim), var(--gold))" : "var(--green-dim)",
+                        boxShadow: tier === 'GULDTIPS' ? "0 0 6px rgba(212,168,67,0.5)" : "none"
+                      }} />
+                    </div>
                     <span style={{
-                      fontSize: "12px", fontWeight: 500,
-                      color: tier === 'GULDTIPS' ? "var(--gold)" : "var(--text-muted)",
-                      background: tier === 'GULDTIPS' ? "var(--gold-bg)" : "rgba(90,90,120,0.08)",
-                      padding: "2px 8px", borderRadius: "2px"
+                      fontSize: "12px", fontWeight: 600, width: "35px", textAlign: "right",
+                      color: tier === 'GULDTIPS' ? "var(--gold)" : "var(--text-muted)"
                     }}>+{edgeVal}%</span>
                   </div>
                   <div style={{ textAlign: "right", fontSize: "13px", color: "var(--text-secondary)", fontWeight: 500 }}>{oddsVal}</div>
@@ -448,30 +454,43 @@ export default function TravDashboard() {
             
             <button
               onClick={() => complete("", { body: { systemData: edgeBets, bankroll } })}
-              disabled={isChefLoading}
+              disabled={isChefLoading || edgeBets.length === 0}
+              className="syncBtn"
               style={{
-                background: isChefLoading ? "rgba(212,168,67,0.2)" : "var(--gold-bg)",
-                border: "1px solid var(--gold)",
-                color: "var(--gold)",
-                padding: "8px 16px", borderRadius: "4px", fontSize: "13px", fontWeight: "bold",
-                cursor: isChefLoading ? "not-allowed" : "pointer"
+                padding: "10px 20px", fontSize: "12px", background: "var(--gold-bg)", 
+                border: "1px solid var(--gold)", color: "var(--gold)", fontWeight: 600,
+                boxShadow: "0 0 15px rgba(212,168,67,0.15)", transition: "all 0.3s ease"
               }}
             >
-              {isChefLoading ? "ANALYS PÅGÅR..." : "GENERERA SYSTEM"}
+              {isChefLoading ? "GENERERAR SYNTES..." : "GENERERA SYSTEM"}
             </button>
           </div>
 
-          {!completion && !isChefLoading && (
-            <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-ghost)", fontSize: "13px" }}>
-              Klicka på "Generera System" för att låta Opus-agenten skriva en systemram baserad på {edgeBets.length} identifierade value-bets.
-            </div>
-          )}
+          <div style={{
+            background: "rgba(10,10,15,0.6)", border: "1px solid var(--border)", 
+            borderRadius: "6px", minHeight: "400px", padding: "24px",
+            fontFamily: "var(--font-mono)", fontSize: "13px", lineHeight: 1.7, color: "var(--text-secondary)"
+          }}>
+            {isChefLoading && completion.length === 0 && (
+              <div style={{ color: "var(--gold)", opacity: 0.8 }} className="pulsing-text">
+                [ INITIALIZING QUANTITATIVE SYSTEM BUILDER... ]
+              </div>
+            )}
+            
+            {!isChefLoading && completion.length === 0 && (
+              <div style={{ textAlign: "center", color: "var(--text-ghost)", marginTop: "150px" }} className="pulsing-text">
+                [ AWAITING INPUT. PRESS GENERATE SYSTEM. ]
+              </div>
+            )}
 
-          {completion && (
-            <div className="summaryCard markdown-body" style={{ background: "rgba(10,10,15,0.8)", border: "1px solid #1A1A24", padding: "24px" }}>
-              <ReactMarkdown>{completion}</ReactMarkdown>
-            </div>
-          )}
+            {completion.length > 0 && (
+              <div className="markdown-body">
+                <ReactMarkdown>
+                  {completion}
+                </ReactMarkdown>
+              </div>
+            )}
+          </div>
         </div>
       )}
       
